@@ -1,29 +1,32 @@
 package org.dhis2.usescases.teiDashboard.teiProgramList;
 
-import android.app.DatePickerDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.view.LayoutInflater;
+
 import android.widget.DatePicker;
 
-import androidx.appcompat.app.AlertDialog;
-
 import org.dhis2.R;
-import org.dhis2.databinding.WidgetDatepickerBinding;
+import org.dhis2.commons.dialogs.calendarpicker.CalendarPicker;
+import org.dhis2.commons.dialogs.calendarpicker.OnDatePickerListener;
+import org.dhis2.data.service.SyncStatusController;
+import org.dhis2.data.service.SyncStatusData;
+import org.dhis2.usescases.main.program.ProgramDownloadState;
 import org.dhis2.usescases.main.program.ProgramViewModel;
-import org.dhis2.utils.custom_views.OrgUnitDialog_2;
+import org.dhis2.utils.customviews.OrgUnitDialog;
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 import org.hisp.dhis.android.core.program.Program;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
+import kotlin.Unit;
 import timber.log.Timber;
 
 /**
@@ -37,9 +40,16 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     private CompositeDisposable compositeDisposable;
     private final TeiProgramListRepository teiProgramListRepository;
     private Date selectedEnrollmentDate;
+    private PublishProcessor<Unit> refreshData = PublishProcessor.create();
+    private SyncStatusController syncStatusController;
+    private SyncStatusData lastSyncData = null;
 
-    TeiProgramListInteractor(TeiProgramListRepository teiProgramListRepository) {
+    TeiProgramListInteractor(
+            TeiProgramListRepository teiProgramListRepository,
+            SyncStatusController syncStatusController
+    ) {
         this.teiProgramListRepository = teiProgramListRepository;
+        this.syncStatusController = syncStatusController;
     }
 
     @Override
@@ -53,148 +63,64 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         getPrograms();
     }
 
-    private void showNativeCalendar(String programUid, String uid, OrgUnitDialog_2 orgUnitDialog) {
-
-        Calendar c = Calendar.getInstance();
-        int year = c.get(Calendar.YEAR);
-        int month = c.get(Calendar.MONTH);
-        int day = c.get(Calendar.DAY_OF_MONTH);
-
-        DatePickerDialog dateDialog = new DatePickerDialog(view.getContext(), (
-                (datePicker, year1, month1, day1) -> {
-                    Calendar selectedCalendar = Calendar.getInstance();
-                    selectedCalendar.set(Calendar.YEAR, year1);
-                    selectedCalendar.set(Calendar.MONTH, month1);
-                    selectedCalendar.set(Calendar.DAY_OF_MONTH, day1);
-                    selectedCalendar.set(Calendar.HOUR_OF_DAY, 0);
-                    selectedCalendar.set(Calendar.MINUTE, 0);
-                    selectedCalendar.set(Calendar.SECOND, 0);
-                    selectedCalendar.set(Calendar.MILLISECOND, 0);
-                    selectedEnrollmentDate = selectedCalendar.getTime();
-
-                    compositeDisposable.add(getOrgUnits(programUid)
-                            .subscribeOn(Schedulers.io())
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribe(
-                                    allOrgUnits -> {
-                                        ArrayList<OrganisationUnit> orgUnits = new ArrayList<>();
-                                        for (OrganisationUnit orgUnit : allOrgUnits) {
-                                            boolean afterOpening = false;
-                                            boolean beforeClosing = false;
-                                            if (orgUnit.openingDate() == null || !selectedEnrollmentDate.before(orgUnit.openingDate()))
-                                                afterOpening = true;
-                                            if (orgUnit.closedDate() == null || !selectedEnrollmentDate.after(orgUnit.closedDate()))
-                                                beforeClosing = true;
-                                            if (afterOpening && beforeClosing)
-                                                orgUnits.add(orgUnit);
-                                        }
-                                        if (orgUnits.size() > 1) {
-                                            orgUnitDialog.setOrgUnits(orgUnits);
-                                            if (!orgUnitDialog.isAdded())
-                                                orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
-                                        } else
-                                            enrollInOrgUnit(orgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
-                                    },
-                                    Timber::d
-                            )
-                    );
-
-
-                }),
-                year,
-                month,
-                day);
-        Program selectedProgram = getProgramFromUid(programUid);
-        if (selectedProgram != null && !selectedProgram.selectEnrollmentDatesInFuture()) {
-            dateDialog.getDatePicker().setMaxDate(System.currentTimeMillis());
-        }
-        if (selectedProgram != null) {
-            dateDialog.setTitle(selectedProgram.enrollmentDateLabel());
-        }
-        dateDialog.setButton(DialogInterface.BUTTON_NEGATIVE, view.getContext().getString(R.string.date_dialog_clear), (dialog, which) -> {
-            dialog.dismiss();
-        });
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            dateDialog.setButton(DialogInterface.BUTTON_NEUTRAL, view.getContext().getResources().getString(R.string.change_calendar), (dialog, which) -> {
-                dateDialog.dismiss();
-                showCustomCalendar(programUid, uid, orgUnitDialog);
-            });
-        }
-
-        dateDialog.show();
-    }
-
-    private void showCustomCalendar(String programUid, String uid, OrgUnitDialog_2 orgUnitDialog) {
-        LayoutInflater layoutInflater = LayoutInflater.from(view.getContext());
-//        View datePickerView = layoutInflater.inflate(R.layout.widget_datepicker, null);
-        WidgetDatepickerBinding binding = WidgetDatepickerBinding.inflate(layoutInflater);
-        final DatePicker datePicker = binding.widgetDatepicker;
-
-        Calendar c = Calendar.getInstance();
-        datePicker.updateDate(
-                c.get(Calendar.YEAR),
-                c.get(Calendar.MONTH),
-                c.get(Calendar.DAY_OF_MONTH));
-
-        AlertDialog.Builder alertDialog = new AlertDialog.Builder(view.getContext(), R.style.DatePickerTheme);
+    private void showCustomCalendar(String programUid, String uid, OrgUnitDialog orgUnitDialog) {
+        CalendarPicker dialog = new CalendarPicker(view.getContext());
 
         Program selectedProgram = getProgramFromUid(programUid);
         if (selectedProgram != null && !selectedProgram.selectEnrollmentDatesInFuture()) {
-            datePicker.setMaxDate(System.currentTimeMillis());
+            dialog.setMaxDate(new Date(System.currentTimeMillis()));
         }
 
         if (selectedProgram != null) {
-            alertDialog.setTitle(selectedProgram.enrollmentDateLabel());
+            dialog.setTitle(selectedProgram.enrollmentDateLabel());
         }
 
-        alertDialog.setView(binding.getRoot());
-        Dialog dialog = alertDialog.create();
+        dialog.setListener(new OnDatePickerListener() {
+            @Override
+            public void onNegativeClick() {
+                dialog.dismiss();
+            }
 
-        binding.changeCalendarButton.setOnClickListener(changeButton -> {
-            showNativeCalendar(programUid, uid, orgUnitDialog);
-            dialog.dismiss();
-        });
+            @Override
+            public void onPositiveClick(@NotNull DatePicker datePicker) {
+                Calendar selectedCalendar = Calendar.getInstance();
+                selectedCalendar.set(Calendar.YEAR, datePicker.getYear());
+                selectedCalendar.set(Calendar.MONTH, datePicker.getMonth());
+                selectedCalendar.set(Calendar.DAY_OF_MONTH, datePicker.getDayOfMonth());
+                selectedCalendar.set(Calendar.HOUR_OF_DAY, 0);
+                selectedCalendar.set(Calendar.MINUTE, 0);
+                selectedCalendar.set(Calendar.SECOND, 0);
+                selectedCalendar.set(Calendar.MILLISECOND, 0);
+                selectedEnrollmentDate = selectedCalendar.getTime();
 
-        binding.clearButton.setOnClickListener(clearButton -> dialog.dismiss());
-        binding.acceptButton.setOnClickListener(acceptButton -> {
-            Calendar selectedCalendar = Calendar.getInstance();
-            selectedCalendar.set(Calendar.YEAR, datePicker.getYear());
-            selectedCalendar.set(Calendar.MONTH, datePicker.getMonth());
-            selectedCalendar.set(Calendar.DAY_OF_MONTH, datePicker.getDayOfMonth());
-            selectedCalendar.set(Calendar.HOUR_OF_DAY, 0);
-            selectedCalendar.set(Calendar.MINUTE, 0);
-            selectedCalendar.set(Calendar.SECOND, 0);
-            selectedCalendar.set(Calendar.MILLISECOND, 0);
-            selectedEnrollmentDate = selectedCalendar.getTime();
-
-            compositeDisposable.add(getOrgUnits(programUid)
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe(
-                            allOrgUnits -> {
-                                ArrayList<OrganisationUnit> orgUnits = new ArrayList<>();
-                                for (OrganisationUnit orgUnit : allOrgUnits) {
-                                    boolean afterOpening = false;
-                                    boolean beforeClosing = false;
-                                    if (orgUnit.openingDate() == null || !selectedEnrollmentDate.before(orgUnit.openingDate()))
-                                        afterOpening = true;
-                                    if (orgUnit.closedDate() == null || !selectedEnrollmentDate.after(orgUnit.closedDate()))
-                                        beforeClosing = true;
-                                    if (afterOpening && beforeClosing)
-                                        orgUnits.add(orgUnit);
-                                }
-                                if (orgUnits.size() > 1) {
-                                    orgUnitDialog.setOrgUnits(orgUnits);
-                                    if (!orgUnitDialog.isAdded())
-                                        orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
-                                } else if (!orgUnits.isEmpty())
-                                    enrollInOrgUnit(orgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
-                                else
-                                    view.displayMessage(view.getContext().getString(R.string.no_org_units));
-                            },
-                            Timber::d
-                    ));
+                compositeDisposable.add(getOrgUnits(programUid)
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(
+                                allOrgUnits -> {
+                                    ArrayList<OrganisationUnit> orgUnits = new ArrayList<>();
+                                    for (OrganisationUnit orgUnit : allOrgUnits) {
+                                        boolean afterOpening = false;
+                                        boolean beforeClosing = false;
+                                        if (orgUnit.openingDate() == null || !selectedEnrollmentDate.before(orgUnit.openingDate()))
+                                            afterOpening = true;
+                                        if (orgUnit.closedDate() == null || !selectedEnrollmentDate.after(orgUnit.closedDate()))
+                                            beforeClosing = true;
+                                        if (afterOpening && beforeClosing)
+                                            orgUnits.add(orgUnit);
+                                    }
+                                    if (orgUnits.size() > 1) {
+                                        orgUnitDialog.setOrgUnits(orgUnits);
+                                        if (!orgUnitDialog.isAdded())
+                                            orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
+                                    } else if (!orgUnits.isEmpty())
+                                        enrollInOrgUnit(orgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
+                                    else
+                                        view.displayMessage(view.getContext().getString(R.string.no_org_units));
+                                },
+                                Timber::d
+                        ));
+            }
         });
 
         dialog.show();
@@ -204,10 +130,9 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     public void enroll(String programUid, String uid) {
         selectedEnrollmentDate = Calendar.getInstance().getTime();
 
-        OrgUnitDialog_2 orgUnitDialog = OrgUnitDialog_2.getInstace().setMultiSelection(false);
+        OrgUnitDialog orgUnitDialog = OrgUnitDialog.getInstace().setMultiSelection(false);
         orgUnitDialog.setProgram(programUid);
-        orgUnitDialog.setTitle("Enrollment Org Unit")
-                .setPossitiveListener(v -> {
+        orgUnitDialog.setPossitiveListener(v -> {
                     if (orgUnitDialog.getSelectedOrgUnit() != null && !orgUnitDialog.getSelectedOrgUnit().isEmpty())
                         enrollInOrgUnit(orgUnitDialog.getSelectedOrgUnit(), programUid, uid, selectedEnrollmentDate);
                     orgUnitDialog.dismiss();
@@ -217,7 +142,8 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         showCustomCalendar(programUid, uid, orgUnitDialog);
     }
 
-    private Program getProgramFromUid(String programUid) {
+    @Override
+    public Program getProgramFromUid(String programUid) {
         return teiProgramListRepository.getProgram(programUid);
     }
 
@@ -241,8 +167,10 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         compositeDisposable.add(teiProgramListRepository.activeEnrollments(trackedEntityId)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                        view::setActiveEnrollments,
+                .subscribe(enrollments -> {
+                            Collections.sort(enrollments, (enrollment1, enrollment2) -> enrollment1.programName().compareToIgnoreCase(enrollment2.programName()));
+                            view.setActiveEnrollments(enrollments);
+                        },
                         Timber::d)
         );
     }
@@ -251,20 +179,55 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         compositeDisposable.add(teiProgramListRepository.otherEnrollments(trackedEntityId)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                        view::setOtherEnrollments,
+                .subscribe(enrollments -> {
+                            Collections.sort(enrollments, (enrollment1, enrollment2) -> enrollment1.programName().compareToIgnoreCase(enrollment2.programName()));
+                            view.setOtherEnrollments(enrollments);
+                        },
                         Timber::d)
         );
     }
 
     private void getPrograms() {
-        compositeDisposable.add(teiProgramListRepository.allPrograms(trackedEntityId)
+        compositeDisposable.add(
+                refreshData.startWith(Unit.INSTANCE)
+                .flatMap(unit -> teiProgramListRepository.allPrograms(trackedEntityId))
+                .map(programViewModels -> {
+                    List<ProgramViewModel> programModels = new ArrayList<>();
+                    for (ProgramViewModel programModel : programViewModels) {
+                        programModels.add(
+                                teiProgramListRepository.updateProgramViewModel(
+                                        programModel,
+                                        getSyncState(programModel)
+                                )
+                        );
+                    }
+                    return programModels;
+                })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
                         this::getAlreadyEnrolledPrograms,
                         Timber::d)
         );
+    }
+
+    private ProgramDownloadState getSyncState(ProgramViewModel programViewModel) {
+        ProgramDownloadState programDownloadState;
+        if (syncStatusController.observeDownloadProcess().getValue().isProgramDownloading(
+                programViewModel.getUid()
+        )) {
+            programDownloadState = ProgramDownloadState.DOWNLOADING;
+        } else if (syncStatusController.observeDownloadProcess().getValue().wasProgramDownloading(
+                lastSyncData,
+                programViewModel.getUid())
+        ) {
+            programDownloadState = ProgramDownloadState.DOWNLOADED;
+        }else if(programViewModel.getDownloadState() == ProgramDownloadState.ERROR){
+            programDownloadState = ProgramDownloadState.ERROR;
+        } else {
+            programDownloadState = ProgramDownloadState.NONE;
+        }
+        return programDownloadState;
     }
 
     private void getAlreadyEnrolledPrograms(List<ProgramViewModel> programs) {
@@ -283,7 +246,7 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
             boolean isAlreadyEnrolled = false;
             boolean onlyEnrollOnce = false;
             for (Program program : alreadyEnrolledPrograms) {
-                if (programViewModel.id().equals(program.uid())) {
+                if (programViewModel.getUid().equals(program.uid())) {
                     isAlreadyEnrolled = true;
                     onlyEnrollOnce = program.onlyEnrollOnce();
                 }
@@ -292,6 +255,7 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
                 programListToPrint.add(programViewModel);
             }
         }
+        Collections.sort(programListToPrint, (program1, program2) -> program1.getTitle().compareToIgnoreCase(program2.getTitle()));
         view.setPrograms(programListToPrint);
     }
 
@@ -303,5 +267,10 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     @Override
     public void onDettach() {
         compositeDisposable.clear();
+    }
+
+    @Override
+    public void refreshData() {
+        refreshData.onNext(Unit.INSTANCE);
     }
 }

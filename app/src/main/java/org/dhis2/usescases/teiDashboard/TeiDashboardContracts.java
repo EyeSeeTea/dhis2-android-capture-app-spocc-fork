@@ -1,38 +1,45 @@
 package org.dhis2.usescases.teiDashboard;
 
-import android.os.Bundle;
-
 import org.dhis2.usescases.general.AbstractActivityContracts;
-import org.hisp.dhis.android.core.program.ProgramModel;
-
-/**
- * QUADRAM. Created by ppajuelo on 30/11/2017.
- */
+import org.hisp.dhis.android.core.enrollment.EnrollmentStatus;
+import org.hisp.dhis.android.core.program.Program;
 
 public class TeiDashboardContracts {
 
     public interface View extends AbstractActivityContracts.View {
 
-        void init(String teUid, String programUid);
-
         void setData(DashboardProgramModel program);
 
         void setDataWithOutProgram(DashboardProgramModel programModel);
 
-        String getToolbarTitle();
-
-        void goToEnrollmentList(Bundle extras);
+        void goToEnrollmentList();
 
         void restoreAdapter(String programUid);
 
-        void handleTEIdeletion();
+        void handleTeiDeletion();
 
         void handleEnrollmentDeletion(Boolean hasMoreEnrollments);
+
+        void authorityErrorMessage();
+
+        void updateNoteBadge(int numberOfNotes);
+
+        void setFiltersLayoutState();
+
+        void updateTotalFilters(Integer totalFilters);
+
+        void hideTabsAndDisableSwipe();
+
+        void showTabsAndEnableSwipe();
+
+        void updateStatus();
+
+        void displayStatusError(StatusChangeResultCode statusCode);
     }
 
     public interface Presenter {
 
-        void init(View view, String uid, String programUid);
+        void init();
 
         void showDescription(String description);
 
@@ -40,17 +47,40 @@ public class TeiDashboardContracts {
 
         void onEnrollmentSelectorClick();
 
-        void setProgram(ProgramModel program);
+        void setProgram(Program program);
 
         void onDettach();
 
-        void getData();
-
         String getProgramUid();
 
-        void deteleteTei();
+        void deleteTei();
 
         void deleteEnrollment();
 
+        void initNoteCounter();
+
+        void refreshTabCounters();
+
+        void prefSaveCurrentProgram(String programUid);
+
+        Boolean getProgramGrouping();
+
+        void generalFiltersClick();
+
+        void handleShowHideFilters(boolean showFilter);
+
+        EnrollmentStatus getEnrollmentStatus(String enrollmentUid);
+
+        void updateEnrollmentStatus(String enrollmentUid, EnrollmentStatus status);
+
+        void setTotalFilters();
+
+        String getTEType();
+
+        void trackDashboardAnalytics();
+
+        void trackDashboardRelationships();
+
+        void trackDashboardNotes();
     }
 }

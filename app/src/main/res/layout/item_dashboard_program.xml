@@ -9,15 +9,19 @@
 
         <variable
             name="presenter"
-            type="org.dhis2.usescases.teiDashboard.dashboardfragments.tei_data.TEIDataContracts.Presenter" />
+            type="org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.TEIDataContracts.Presenter" />
 
         <variable
             name="program"
-            type="org.hisp.dhis.android.core.program.ProgramModel" />
+            type="org.hisp.dhis.android.core.program.Program" />
 
         <variable
             name="enrollment"
-            type="org.hisp.dhis.android.core.enrollment.EnrollmentModel" />
+            type="org.hisp.dhis.android.core.enrollment.Enrollment" />
+
+        <variable
+            name="style"
+            type="org.hisp.dhis.android.core.common.ObjectStyle" />
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -25,17 +29,14 @@
         android:layout_height="wrap_content"
         android:background="@android:color/white">
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/program_image"
             android:layout_width="75dp"
             android:layout_height="0dp"
-            android:background="?attr/colorPrimaryLight"
             app:layout_constraintBottom_toBottomOf="@id/enrollmentDateLabel"
             app:layout_constraintTop_toTopOf="parent"
-            tools:background="?attr/colorPrimaryLight"
             app:layout_constraintStart_toStartOf="parent"
-            tools:ignore="ContentDescription"
-            tools:src="@drawable/ic_program_default" />
+            app:set_metadata_icon='@{style}'/>
 
         <TextView
             android:id="@+id/program_last_date_label"
@@ -125,6 +126,7 @@
 
         <ImageView
             android:id="@+id/overdue"
+            style="@style/ActionIconUnwrap"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_marginBottom="5dp"

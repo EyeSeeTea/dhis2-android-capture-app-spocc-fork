@@ -2,38 +2,43 @@ package org.dhis2.usescases.teiDashboard;
 
 import androidx.annotation.NonNull;
 
-import com.squareup.sqlbrite2.BriteDatabase;
-
-import org.dhis2.data.dagger.PerActivity;
+import org.dhis2.commons.di.dagger.PerActivity;
+import org.dhis2.commons.prefs.PreferenceProvider;
 import org.dhis2.data.forms.EnrollmentFormRepository;
 import org.dhis2.data.forms.FormRepository;
-import org.dhis2.data.forms.RulesRepository;
+import org.dhis2.form.data.RulesRepository;
 import org.dhis2.data.forms.dataentry.EnrollmentRuleEngineRepository;
 import org.dhis2.data.forms.dataentry.RuleEngineRepository;
-import org.dhis2.data.metadata.MetadataRepository;
-import org.dhis2.utils.CodeGenerator;
+import org.dhis2.commons.schedulers.SchedulerProvider;
+import org.dhis2.utils.analytics.AnalyticsHelper;
+import org.dhis2.commons.matomo.MatomoAnalyticsController;
+import org.dhis2.utils.customviews.navigationbar.NavigationPageConfigurator;
+import org.dhis2.commons.filters.FilterManager;
+import org.dhis2.commons.resources.ResourceManager;
 import org.hisp.dhis.android.core.D2;
-import org.hisp.dhis.android.core.enrollment.EnrollmentCollectionRepository;
-import org.hisp.dhis.rules.RuleExpressionEvaluator;
 
 import dagger.Module;
 import dagger.Provides;
-
-import static android.text.TextUtils.isEmpty;
+import dhis2.org.analytics.charts.Charts;
 
 /**
  * QUADRAM. Created by ppajuelo on 30/11/2017.
  */
-@PerActivity
 @Module
 public class TeiDashboardModule {
 
     public final String programUid;
     public final String teiUid;
+    private final TeiDashboardContracts.View view;
+    private final String enrollmentUid;
+    private final boolean isPortrait;
 
-    public TeiDashboardModule(String teiUid, String programUid) {
+    public TeiDashboardModule(TeiDashboardContracts.View view, String teiUid, String programUid, String enrollmentUid, boolean isPortrait) {
+        this.view = view;
         this.teiUid = teiUid;
         this.programUid = programUid;
+        this.enrollmentUid = enrollmentUid;
+        this.isPortrait = isPortrait;
     }
 
     @Provides
@@ -44,37 +49,61 @@ public class TeiDashboardModule {
 
     @Provides
     @PerActivity
-    TeiDashboardContracts.Presenter providePresenter(D2 d2, DashboardRepository dashboardRepository,
-                                                     MetadataRepository metadataRepository) {
-        return new TeiDashboardPresenter(d2, dashboardRepository, metadataRepository);
+    TeiDashboardContracts.Presenter providePresenter(DashboardRepository dashboardRepository,
+                                                     SchedulerProvider schedulerProvider,
+                                                     AnalyticsHelper analyticsHelper,
+                                                     PreferenceProvider preferenceProvider,
+                                                     FilterManager filterManager,
+                                                     MatomoAnalyticsController matomoAnalyticsController) {
+        return new TeiDashboardPresenter(view,
+                teiUid,
+                programUid,
+                enrollmentUid,
+                dashboardRepository,
+                schedulerProvider,
+                analyticsHelper,
+                preferenceProvider,
+                filterManager,
+                matomoAnalyticsController);
     }
 
     @Provides
     @PerActivity
-    DashboardRepository dashboardRepository(CodeGenerator codeGenerator, BriteDatabase briteDatabase, D2 d2) {
-        return new DashboardRepositoryImpl(codeGenerator, briteDatabase, d2);
+    DashboardRepository dashboardRepository(D2 d2, Charts charts, ResourceManager resources, TeiAttributesProvider teiAttributesProvider) {
+        return new DashboardRepositoryImpl(d2, charts, teiUid, programUid, enrollmentUid, resources, teiAttributesProvider);
     }
 
     @Provides
     @PerActivity
-    RulesRepository rulesRepository(@NonNull BriteDatabase briteDatabase, @NonNull D2 d2) {
-        return new RulesRepository(briteDatabase, d2);
+    RulesRepository rulesRepository(@NonNull D2 d2) {
+        return new RulesRepository(d2);
     }
 
     @Provides
     @PerActivity
-    FormRepository formRepository(@NonNull BriteDatabase briteDatabase,
-                                  @NonNull RuleExpressionEvaluator evaluator,
-                                  @NonNull RulesRepository rulesRepository,
-                                  @NonNull CodeGenerator codeGenerator,
-                                  D2 d2) {
-        EnrollmentCollectionRepository enrollmentRepository = d2.enrollmentModule().enrollments
-                .byTrackedEntityInstance().eq(teiUid);
-        if (!isEmpty(programUid))
-            enrollmentRepository = enrollmentRepository.byProgram().eq(programUid);
+    FormRepository formRepository(
+            @NonNull RulesRepository rulesRepository,
+            D2 d2) {
+        String enrollmentUidToUse = enrollmentUid != null ? enrollmentUid : "";
+        return new EnrollmentFormRepository(rulesRepository, enrollmentUidToUse, d2);
+    }
 
-        String uid = enrollmentRepository.one().get().uid();
+    @Provides
+    @PerActivity
+    RuleEngineRepository ruleEngineRepository(D2 d2, FormRepository formRepository) {
+        String enrollmentUidToUse = enrollmentUid != null ? enrollmentUid : "";
+        return new EnrollmentRuleEngineRepository(formRepository, enrollmentUidToUse, d2);
+    }
 
-        return new EnrollmentFormRepository(briteDatabase, evaluator, rulesRepository, codeGenerator, uid, d2);
+    @Provides
+    @PerActivity
+    NavigationPageConfigurator pageConfigurator(DashboardRepository dashboardRepository) {
+        return new TeiDashboardPageConfigurator(dashboardRepository, isPortrait);
+    }
+
+    @Provides
+    @PerActivity
+    TeiAttributesProvider teiAttributesProvider(D2 d2) {
+        return new TeiAttributesProvider(d2);
     }
 }

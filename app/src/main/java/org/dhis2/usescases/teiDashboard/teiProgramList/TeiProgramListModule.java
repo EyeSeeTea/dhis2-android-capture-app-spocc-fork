@@ -2,10 +2,12 @@ package org.dhis2.usescases.teiDashboard.teiProgramList;
 
 import androidx.annotation.NonNull;
 
-import com.squareup.sqlbrite2.BriteDatabase;
-
-import org.dhis2.data.dagger.PerActivity;
-import org.dhis2.utils.CodeGenerator;
+import org.dhis2.commons.di.dagger.PerActivity;
+import org.dhis2.commons.prefs.PreferenceProvider;
+import org.dhis2.commons.resources.ResourceManager;
+import org.dhis2.data.service.SyncStatusController;
+import org.dhis2.usescases.main.program.ProgramViewModelMapper;
+import org.dhis2.utils.analytics.AnalyticsHelper;
 import org.hisp.dhis.android.core.D2;
 
 import dagger.Module;
@@ -14,14 +16,15 @@ import dagger.Provides;
 /**
  * QUADRAM. Created by Cristian on 13/02/2018.
  */
-@PerActivity
 @Module
 public class TeiProgramListModule {
 
 
+    private final TeiProgramListContract.View view;
     private final String teiUid;
 
-    TeiProgramListModule(String teiUid) {
+    TeiProgramListModule(TeiProgramListContract.View view, String teiUid) {
+        this.view = view;
         this.teiUid = teiUid;
     }
 
@@ -33,14 +36,19 @@ public class TeiProgramListModule {
 
     @Provides
     @PerActivity
-    TeiProgramListContract.Presenter providesPresenter(TeiProgramListContract.Interactor interactor) {
-        return new TeiProgramListPresenter(interactor, teiUid);
+    TeiProgramListContract.Presenter providesPresenter(TeiProgramListContract.Interactor interactor,
+                                                       PreferenceProvider preferenceProvider,
+                                                       AnalyticsHelper analyticsHelper,
+                                                       D2 d2) {
+        return new TeiProgramListPresenter(view, interactor, teiUid, preferenceProvider, analyticsHelper,
+                d2.enrollmentModule().enrollmentService());
     }
 
     @Provides
     @PerActivity
-    TeiProgramListContract.Interactor provideInteractor(@NonNull TeiProgramListRepository teiProgramListRepository) {
-        return new TeiProgramListInteractor(teiProgramListRepository);
+    TeiProgramListContract.Interactor provideInteractor(@NonNull TeiProgramListRepository teiProgramListRepository,
+                                                        SyncStatusController syncStatusController) {
+        return new TeiProgramListInteractor(teiProgramListRepository, syncStatusController);
     }
 
     @Provides
@@ -51,7 +59,7 @@ public class TeiProgramListModule {
 
     @Provides
     @PerActivity
-    TeiProgramListRepository eventDetailRepository(@NonNull CodeGenerator codeGenerator, @NonNull BriteDatabase briteDatabase, D2 d2) {
-        return new TeiProgramListRepositoryImpl(codeGenerator, briteDatabase, d2);
+    TeiProgramListRepository eventDetailRepository(D2 d2) {
+        return new TeiProgramListRepositoryImpl(d2, new ProgramViewModelMapper(new ResourceManager(view.getContext())));
     }
 }

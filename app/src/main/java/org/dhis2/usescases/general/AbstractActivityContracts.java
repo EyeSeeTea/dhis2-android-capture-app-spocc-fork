@@ -6,13 +6,11 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.ActivityOptionsCompat;
 
-import org.dhis2.usescases.main.program.SyncStatusDialog;
 import org.dhis2.utils.OnDialogClickListener;
-
-import java.util.List;
+import org.dhis2.utils.analytics.AnalyticsHelper;
+import org.dhis2.utils.granularsync.SyncStatusDialog;
 
 /**
  * QUADRAM. Created by ppajuelo on 27/09/2017.
@@ -35,27 +33,28 @@ public class AbstractActivityContracts {
 
         void showInfoDialog(String title, String message);
 
-        AlertDialog showInfoDialog(String title, String message, OnDialogClickListener dialogListener);
+        void showInfoDialog(String title, String message, OnDialogClickListener dialogListener);
 
         void setTutorial();
 
         void showTutorial(boolean shaked);
 
-        <T> void saveListToPreference(String key, List<T> list);
-
-        <T> List<T> getListFromPreference(String key);
-
         void hideKeyboard();
 
         void showToast(String message);
 
-        AlertDialog showInfoDialog(String title, String message, String possitiveButtonText, String negativeButtonText, OnDialogClickListener clickListener);
+        void showInfoDialog(String title, String message, String possitiveButtonText, String negativeButtonText, OnDialogClickListener clickListener);
 
         void showDescription(String description);
 
+        @Deprecated
         SharedPreferences getSharedPreferences();
 
-        void showSyncDialog(String programUid, SyncStatusDialog.ConflictType conflictType);
+        @Deprecated
+        void showSyncDialog(SyncStatusDialog dialog);
+
+        @Deprecated
+        AnalyticsHelper analyticsHelper();
     }
 
     public interface Presenter {

@@ -1,134 +1,163 @@
 package org.dhis2.usescases.datasets.datasetDetail;
 
-import android.database.Cursor;
 
-import com.squareup.sqlbrite2.BriteDatabase;
+import static org.dhis2.data.dhislogic.AuthoritiesKt.AUTH_DATAVALUE_ADD;
 
-import org.dhis2.utils.DateUtils;
+import org.dhis2.data.dhislogic.DhisPeriodUtils;
+import org.hisp.dhis.android.core.D2;
+import org.hisp.dhis.android.core.arch.helpers.UidsHelper;
+import org.hisp.dhis.android.core.category.CategoryOption;
+import org.hisp.dhis.android.core.category.CategoryOptionCombo;
 import org.hisp.dhis.android.core.common.State;
-import org.hisp.dhis.android.core.datavalue.DataValueModel;
-import org.hisp.dhis.android.core.organisationunit.OrganisationUnitModel;
-import org.hisp.dhis.android.core.period.PeriodModel;
+import org.hisp.dhis.android.core.dataset.DataSetCompleteRegistration;
+import org.hisp.dhis.android.core.dataset.DataSetInstanceCollectionRepository;
+import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
+import org.hisp.dhis.android.core.period.DatePeriod;
+import org.hisp.dhis.android.core.period.Period;
 import org.hisp.dhis.android.core.period.PeriodType;
+import org.hisp.dhis.android.core.settings.AnalyticsDhisVisualizationsSetting;
 
+import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
-import androidx.annotation.NonNull;
-import io.reactivex.BackpressureStrategy;
+import dhis2.org.analytics.charts.Charts;
 import io.reactivex.Flowable;
-import io.reactivex.Observable;
 
 public class DataSetDetailRepositoryImpl implements DataSetDetailRepository {
 
-    private final static String GET_DATA_SETS = "SELECT " +
-            "DataValue.organisationUnit, " +
-            "DataValue.period, " +
-            "DataValue.attributeOptionCombo " +
-            "FROM DataValue " +
-            "JOIN DataSetDataElementLink " +
-            "ON DataSetDataElementLink.dataElement = DataValue.dataElement " +
-            "WHERE DataSetDataElementLink.dataSet = ? %s " +
-            "GROUP BY DataValue.period,DataValue.organisationUnit,DataValue.categoryOptionCombo";
+    private final D2 d2;
+    private final String dataSetUid;
+    private final DhisPeriodUtils periodUtils;
+    private final Charts charts;
 
-    private final static String DATA_SETS_ORG_UNIT_FILTER = "AND DataValue.organisationUnit IN (%s) ";
-    private final static String DATA_SETS_PERIOD_FILTER = "AND DataValue.period = ? ";
-
-    private final BriteDatabase briteDatabase;
-
-    public DataSetDetailRepositoryImpl(BriteDatabase briteDatabase) {
-        this.briteDatabase = briteDatabase;
-    }
-
-
-    @NonNull
-    @Override
-    public Observable<List<OrganisationUnitModel>> orgUnits() {
-        String SELECT_ORG_UNITS = "SELECT * FROM " + OrganisationUnitModel.TABLE;
-        return briteDatabase.createQuery(OrganisationUnitModel.TABLE, SELECT_ORG_UNITS)
-                .mapToList(OrganisationUnitModel::create);
+    public DataSetDetailRepositoryImpl(String dataSetUid, D2 d2, DhisPeriodUtils periodUtils, Charts charts) {
+        this.d2 = d2;
+        this.dataSetUid = dataSetUid;
+        this.periodUtils = periodUtils;
+        this.charts = charts;
     }
 
     @Override
-    public Flowable<List<DataSetDetailModel>> dataSetGroups(String dataSetUid, List<String> orgUnits, PeriodType selectedPeriodType, int page) {
-        String SQL = GET_DATA_SETS;
-        String orgUnitFilter = "";
-        if (orgUnits != null && !orgUnits.isEmpty()) {
-            StringBuilder orgUnitUids = new StringBuilder("");
-            for (int i = 0; i < orgUnits.size(); i++) {
-                orgUnitUids.append(orgUnits.get(i));
-                if (i != orgUnits.size() - 1)
-                    orgUnitUids.append(",");
-            }
+    public String getDataSetUid() {
+        return dataSetUid;
+    }
 
-            orgUnitFilter = String.format(DATA_SETS_ORG_UNIT_FILTER, orgUnitFilter);
-        }
+    @Override
+    public Flowable<List<DataSetDetailModel>> dataSetGroups(List<String> orgUnits, List<DatePeriod> periodFilter, List<State> stateFilters, List<CategoryOptionCombo> catOptComboFilters) {
+        DataSetInstanceCollectionRepository repo;
+        repo = d2.dataSetModule().dataSetInstances().byDataSetUid().eq(dataSetUid);
+        if (!orgUnits.isEmpty())
+            repo = repo.byOrganisationUnitUid().in(orgUnits);
+        if (!periodFilter.isEmpty())
+            repo = repo.byPeriodStartDate().inDatePeriods(periodFilter);
+        if (!catOptComboFilters.isEmpty())
+            repo = repo.byAttributeOptionComboUid().in(UidsHelper.getUids(catOptComboFilters));
 
-        SQL = String.format(SQL, orgUnitFilter);
+        d2.dataSetModule().dataSets().uid(dataSetUid).blockingGet();
+        int dataSetOrgUnitNumber = d2.organisationUnitModule().organisationUnits()
+                .byDataSetUids(Collections.singletonList(dataSetUid))
+                .blockingGet().size();
 
-        return briteDatabase.createQuery(DataValueModel.TABLE, SQL, dataSetUid)
-                .mapToList(cursor -> {
-                    String organisationUnitUid = cursor.getString(0);
-                    String period = cursor.getString(1);
-                    String categoryOptionCombo = cursor.getString(2);
+        DataSetInstanceCollectionRepository finalRepo = repo;
+        return Flowable.fromIterable(finalRepo.blockingGet())
+                .map(dataSetReport -> {
+                    Period period = d2.periodModule().periods().byPeriodId().eq(dataSetReport.period()).one().blockingGet();
+                    String periodName = periodUtils.getPeriodUIString(period.periodType(), period.startDate(), Locale.getDefault());
+                    DataSetCompleteRegistration dscr = d2.dataSetModule().dataSetCompleteRegistrations()
+                            .byDataSetUid().eq(dataSetUid)
+                            .byAttributeOptionComboUid().eq(dataSetReport.attributeOptionComboUid())
+                            .byOrganisationUnitUid().eq(dataSetReport.organisationUnitUid())
+                            .byPeriod().eq(dataSetReport.period()).one().blockingGet();
 
-                    String orgUnitName = "";
-                    String periodName = "";
-                    String catOptCombName = "";
-                    State state = State.SYNCED;
-                    try (Cursor orgUnitCursor = briteDatabase.query("SELECT OrganisationUnit.displayName FROM OrganisationUnit WHERE uid = ?", organisationUnitUid)) {
-                        if (orgUnitCursor != null && orgUnitCursor.moveToFirst()) {
-                            orgUnitName = orgUnitCursor.getString(0);
-                        }
+                    State state = dataSetReport.state();
+
+                    if (state == State.SYNCED && dscr != null) {
+                        state = dscr.state();
                     }
 
-                    try (Cursor periodCursor = briteDatabase.query("SELECT Period.* FROM Period WHERE Period.periodId = ?", period)) {
-                        if (periodCursor != null && periodCursor.moveToFirst()) {
-                            PeriodModel periodModel = PeriodModel.create(periodCursor);
-                            periodName = DateUtils.getInstance().getPeriodUIString(periodModel.periodType(), periodModel.startDate(), Locale.getDefault());
-                        }
-                    }
+                    boolean isCompleted = dscr != null && Boolean.FALSE.equals(dscr.deleted());
 
-                    try (Cursor catOptCombCursor = briteDatabase.query("SELECT CategoryOptionCombo.displayName FROM CategoryOptionCombo WHERE uid = ?", categoryOptionCombo)) {
-                        if (catOptCombCursor != null && catOptCombCursor.moveToFirst()) {
-                            catOptCombName = catOptCombCursor.getString(0);
-                        }
-                    }
+                    return DataSetDetailModel.create(
+                            dataSetReport.organisationUnitUid(),
+                            dataSetReport.attributeOptionComboUid(),
+                            dataSetReport.period(),
+                            dataSetReport.organisationUnitDisplayName(),
+                            dataSetReport.attributeOptionComboDisplayName(),
+                            periodName,
+                            state,
+                            dataSetReport.periodType().name(),
+                            dataSetOrgUnitNumber > 1,
+                            isCompleted);
+                })
+                .filter(dataSetDetailModel -> stateFilters.isEmpty() || stateFilters.contains(dataSetDetailModel.state()))
+                .toSortedList((dataSet1, dataSet2) -> {
+                    Date startDate1 = d2.periodModule().periods()
+                            .byPeriodId().eq(dataSet1.periodId())
+                            .byPeriodType().eq(PeriodType.valueOf(dataSet1.periodType())).one().blockingGet().startDate();
+                    Date startDate2 = d2.periodModule().periods()
+                            .byPeriodId().eq(dataSet2.periodId())
+                            .byPeriodType().eq(PeriodType.valueOf(dataSet2.periodType())).one().blockingGet().startDate();
+                    return startDate2.compareTo(startDate1);
+                })
+                .toFlowable();
+    }
 
-                    try (Cursor stateCursor = briteDatabase.query("SELECT DataValue.state FROM DataValue " +
-                                    "WHERE period = ? AND organisationUnit = ? AND attributeOptionCombo = ? " +
-                                    "AND state != 'SYNCED'",
-                            period, organisationUnitUid, categoryOptionCombo)) {
-                        if (stateCursor != null && stateCursor.moveToFirst()) {
-                            State errorState = null;
-                            State toPost = null;
-                            State toUpdate = null;
-                            for (int i = 0; i < cursor.getCount(); i++) {
-                                State stateValue = State.valueOf(cursor.getString(0));
-                                switch (stateValue) {
-                                    case ERROR:
-                                        errorState = State.ERROR;
-                                        break;
-                                    case TO_POST:
-                                        toPost = State.TO_POST;
-                                        break;
-                                    case TO_UPDATE:
-                                        toUpdate = State.TO_UPDATE;
-                                        break;
-                                }
-                                cursor.moveToNext();
-                            }
+    @Override
+    public Flowable<Boolean> canWriteAny() {
+        return d2.dataSetModule().dataSets().uid(dataSetUid).get().toFlowable()
+                .flatMap(dataSet -> {
+                    if (dataSet.access().data().write() && hasDataValueAuthority())
+                        return d2.categoryModule().categoryOptionCombos().withCategoryOptions()
+                                .byCategoryComboUid().eq(dataSet.categoryCombo().uid()).get().toFlowable()
+                                .map(categoryOptionCombos -> {
+                                    boolean canWriteCatOption = false;
+                                    for (CategoryOptionCombo categoryOptionCombo : categoryOptionCombos) {
+                                        for (CategoryOption categoryOption : categoryOptionCombo.categoryOptions())
+                                            if (categoryOption.access().data().write()) {
+                                                canWriteCatOption = true;
+                                                break;
+                                            }
+                                    }
+                                    boolean canWriteOrgUnit = false;
 
-                            if (errorState != null)
-                                state = errorState;
-                            else if (toUpdate != null)
-                                state = toUpdate;
-                            else if (toPost != null)
-                                state = toPost;
-                        }
-                    }
+                                    if (canWriteCatOption) {
 
-                    return DataSetDetailModel.create(organisationUnitUid, categoryOptionCombo, period, orgUnitName, catOptCombName, periodName, state);
-                }).toFlowable(BackpressureStrategy.LATEST);
+                                        int countOrgUnits = d2.organisationUnitModule().organisationUnits().byDataSetUids(Collections.singletonList(dataSetUid))
+                                                .byOrganisationUnitScope(OrganisationUnit.Scope.SCOPE_DATA_CAPTURE).blockingCount();
+
+                                        canWriteOrgUnit = countOrgUnits != 0;
+
+                                    }
+
+                                    return canWriteCatOption && canWriteOrgUnit;
+
+                                });
+                    else
+                        return Flowable.just(false);
+                });
+
+    }
+
+    private boolean hasDataValueAuthority() {
+        return !d2.userModule().authorities().byName().eq(AUTH_DATAVALUE_ADD).blockingIsEmpty();
+    }
+
+    @Override
+    public CategoryOptionCombo getCatOptCombo(String selectedCatOptionCombo) {
+        return d2.categoryModule().categoryOptionCombos().uid(selectedCatOptionCombo).blockingGet();
+    }
+
+    @Override
+    public boolean dataSetHasAnalytics() {
+        AnalyticsDhisVisualizationsSetting visualizationSettings = d2.settingModule().analyticsSetting()
+                .visualizationsSettings()
+                .blockingGet();
+
+        return visualizationSettings.dataSet().get(dataSetUid) != null &&
+                !Objects.requireNonNull(visualizationSettings.dataSet().get(dataSetUid)).isEmpty();
+
     }
 }

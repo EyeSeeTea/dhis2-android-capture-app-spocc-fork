@@ -1,24 +1,24 @@
 package org.dhis2.Bindings;
 
+import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
+import android.graphics.Typeface;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
-import android.text.method.ScrollingMovementMethod;
 import android.util.TypedValue;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.appcompat.widget.AppCompatSpinner;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.databinding.BindingAdapter;
@@ -28,76 +28,28 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.dhis2.R;
-import org.dhis2.usescases.programEventDetail.ProgramEventViewModel;
+import org.dhis2.commons.animations.ViewAnimationsKt;
+import org.dhis2.commons.filters.CatOptionComboFilter;
+import org.dhis2.commons.data.ProgramEventViewModel;
 import org.dhis2.utils.CatComboAdapter;
 import org.dhis2.utils.DateUtils;
-import org.hisp.dhis.android.core.category.CategoryOptionComboModel;
-import org.hisp.dhis.android.core.common.ObjectStyleModel;
+import org.dhis2.utils.NetworkUtils;
+import org.hisp.dhis.android.core.category.CategoryOptionCombo;
 import org.hisp.dhis.android.core.common.State;
-import org.hisp.dhis.android.core.enrollment.EnrollmentModel;
+import org.hisp.dhis.android.core.enrollment.Enrollment;
 import org.hisp.dhis.android.core.enrollment.EnrollmentStatus;
-import org.hisp.dhis.android.core.event.EventModel;
+import org.hisp.dhis.android.core.event.Event;
 import org.hisp.dhis.android.core.event.EventStatus;
-import org.hisp.dhis.android.core.imports.ImportStatus;
 import org.hisp.dhis.android.core.period.PeriodType;
-import org.hisp.dhis.android.core.program.ProgramModel;
-import org.hisp.dhis.android.core.program.ProgramStageModel;
+import org.hisp.dhis.android.core.program.Program;
+import org.hisp.dhis.android.core.program.ProgramStage;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import timber.log.Timber;
-
-/**
- * QUADRAM. Created by ppajuelo on 28/09/2017.
- */
 
 public class Bindings {
-
-    @BindingAdapter("elevation")
-    public static void setElevation(View view, float elevation) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            view.setElevation(elevation);
-        } else {
-            Drawable drawable = view.getResources().getDrawable(android.R.drawable.dialog_holo_light_frame);
-            drawable.setColorFilter(new PorterDuffColorFilter(view.getResources().getColor(R.color.colorGreyDefault), PorterDuff.Mode.MULTIPLY));
-            view.setBackground(drawable);
-        }
-    }
-
-    @BindingAdapter("scrollingTextView")
-    public static void setScrollingTextView(TextView textView, boolean canScroll) {
-        if (canScroll) {
-            textView.setMovementMethod(new ScrollingMovementMethod());
-        }
-    }
-
-    @BindingAdapter("date")
-    public static void setDate(TextView textView, String date) {
-        SimpleDateFormat formatIn = DateUtils.databaseDateFormat();
-        SimpleDateFormat formatOut = DateUtils.uiDateFormat();
-        try {
-            Date dateIn = formatIn.parse(date);
-            String dateOut = formatOut.format(dateIn);
-            textView.setText(dateOut);
-        } catch (ParseException e) {
-            Timber.e(e);
-        }
-
-    }
-
-    @BindingAdapter("date")
-    public static void parseDate(TextView textView, Date date) {
-        if (date != null) {
-            SimpleDateFormat formatOut = DateUtils.uiDateFormat();
-            String dateOut = formatOut.format(date);
-            textView.setText(dateOut);
-        }
-
-    }
 
     @BindingAdapter("drawableEnd")
     public static void setDrawableEnd(TextView textView, Drawable drawable) {
@@ -132,15 +84,6 @@ public class Bindings {
                 }
             });
         }
-    }
-
-    @BindingAdapter("progressColor")
-    public static void setProgressColor(ProgressBar progressBar, int color) {
-        TypedValue typedValue = new TypedValue();
-        TypedArray a = progressBar.getContext().obtainStyledAttributes(typedValue.data, new int[]{R.attr.colorPrimary});
-        int color2 = a.getColor(0, 0);
-        a.recycle();
-        progressBar.getIndeterminateDrawable().setColorFilter(color2, PorterDuff.Mode.SRC_IN);
     }
 
     @BindingAdapter("enrolmentIcon")
@@ -190,56 +133,82 @@ public class Bindings {
         view.setText(text);
     }
 
+    public static String enrollmentText(Context context, EnrollmentStatus status) {
+        String text;
+        if (status == null)
+            status = EnrollmentStatus.ACTIVE;
+        switch (status) {
+            case ACTIVE:
+                text = context.getString(R.string.event_open);
+                break;
+            case COMPLETED:
+                text = context.getString(R.string.completed);
+                break;
+            case CANCELLED:
+                text = context.getString(R.string.cancelled);
+                break;
+            default:
+                text = context.getString(R.string.read_only);
+                break;
+        }
+        return text;
+    }
+
     @BindingAdapter(value = {"eventStatusIcon", "enrollmentStatusIcon", "eventProgramStage", "eventProgram"}, requireAll = false)
-    public static void setEventIcon(ImageView view, EventModel event, EnrollmentModel enrollmentModel, ProgramStageModel eventProgramStage, ProgramModel program) {
+    public static void setEventIcon(ImageView view, Event event, Enrollment enrollment, ProgramStage eventProgramStage, Program program) {
         if (event != null) {
             EventStatus status = event.status();
-            EnrollmentStatus enrollmentStatus = enrollmentModel.enrollmentStatus();
+            EnrollmentStatus enrollmentStatus = EnrollmentStatus.ACTIVE;
+            if (enrollment != null) {
+                enrollmentStatus = enrollment.status();
+            }
             if (status == null)
                 status = EventStatus.ACTIVE;
             if (enrollmentStatus == null)
                 enrollmentStatus = EnrollmentStatus.ACTIVE;
 
-            if (enrollmentStatus == EnrollmentStatus.ACTIVE) {
-                switch (status) {
-                    case ACTIVE:
-                        Date eventDate = event.eventDate();
-                        if (eventProgramStage.periodType() != null && eventProgramStage.periodType().name().contains(PeriodType.Weekly.name()))
-                            eventDate = DateUtils.getInstance().getNextPeriod(eventProgramStage.periodType(), eventDate, 0, true);
-                        if (DateUtils.getInstance().isEventExpired(eventDate, null, event.status(), program.completeEventsExpiryDays(), eventProgramStage.periodType() != null ? eventProgramStage.periodType() : program.expiryPeriodType(), program.expiryDays())) {
-                            view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_eye_red));
-                        } else {
-                            view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_edit));
-                        }
-                        break;
-                    case OVERDUE:
-                    case COMPLETED:
-                    case SKIPPED:
-                        view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_visibility));
-                        break;
-                    case SCHEDULE:
-                        view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_edit));
-                        break;
-                    case VISITED:
-                        view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_edit));
-                        break;
-                    default:
-                        view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_edit));
-                        break;
-                }
-            } else if (enrollmentStatus == EnrollmentStatus.COMPLETED) {
-                view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_visibility));
-            } else { //EnrollmentStatus = CANCELLED
-                view.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_visibility));
+            int drawableResource;
+            switch (status) {
+                case ACTIVE:
+                    Date eventDate = event.eventDate();
+                    if (eventProgramStage.periodType() != null && eventProgramStage.periodType().name().contains(PeriodType.Weekly.name())) {
+                        eventDate = DateUtils.getInstance().getNextPeriod(eventProgramStage.periodType(), eventDate, 0, true);
+                    }
+                    boolean isExpired = DateUtils.getInstance().isEventExpired(eventDate, null, event.status(), program.completeEventsExpiryDays(), eventProgramStage.periodType() != null ? eventProgramStage.periodType() : program.expiryPeriodType(), program.expiryDays());
+                    drawableResource = (enrollmentStatus == EnrollmentStatus.ACTIVE && !isExpired) ? R.drawable.ic_event_status_open : R.drawable.ic_event_status_open_read;
+                    break;
+                case OVERDUE:
+                    drawableResource = enrollmentStatus == EnrollmentStatus.ACTIVE ? R.drawable.ic_event_status_overdue : R.drawable.ic_event_status_overdue_read;
+                    break;
+                case COMPLETED:
+                    drawableResource = enrollmentStatus == EnrollmentStatus.ACTIVE ? R.drawable.ic_event_status_complete : R.drawable.ic_event_status_complete_read;
+                    break;
+                case SKIPPED:
+                    drawableResource = enrollmentStatus == EnrollmentStatus.ACTIVE ? R.drawable.ic_event_status_skipped : R.drawable.ic_event_status_skipped_read;
+                    break;
+                case SCHEDULE:
+                    drawableResource = enrollmentStatus == EnrollmentStatus.ACTIVE ? R.drawable.ic_event_status_schedule : R.drawable.ic_event_status_schedule_read;
+                    break;
+                default:
+                    drawableResource = R.drawable.ic_event_status_open_read;
+                    break;
             }
+
+            view.setImageDrawable(
+                    AppCompatResources.getDrawable(
+                            view.getContext(),
+                            drawableResource
+                    )
+            );
+            view.setTag(drawableResource);
         }
     }
 
     @BindingAdapter(value = {"eventStatusText", "enrollmentStatus", "eventProgramStage", "eventProgram"})
-    public static void setEventText(TextView view, EventModel event, EnrollmentModel enrollmentModel, ProgramStageModel eventProgramStage, ProgramModel program) {
+    public static void setEventText(TextView view, Event event, Enrollment enrollment, ProgramStage eventProgramStage, Program program) {
         if (event != null) {
             EventStatus status = event.status();
-            EnrollmentStatus enrollmentStatus = enrollmentModel.enrollmentStatus();
+            EnrollmentStatus enrollmentStatus = enrollment.status();
             if (status == null)
                 status = EventStatus.ACTIVE;
             if (enrollmentStatus == null)
@@ -266,7 +235,13 @@ public class Bindings {
                         }
                         break;
                     case SCHEDULE:
-                        if (DateUtils.getInstance().hasExpired(event, program.expiryDays(), program.completeEventsExpiryDays(), eventProgramStage.periodType() != null ? eventProgramStage.periodType() : program.expiryPeriodType())) {
+                        if (DateUtils.getInstance().isEventExpired(
+                                event.dueDate(),
+                                null,
+                                status,
+                                program.completeEventsExpiryDays(),
+                                eventProgramStage.periodType() != null ? eventProgramStage.periodType() : program.expiryPeriodType(),
+                                program.expiryDays())) {
                             view.setText(view.getContext().getString(R.string.event_expired));
                         } else {
                             view.setText(view.getContext().getString(R.string.event_schedule));
@@ -291,7 +266,7 @@ public class Bindings {
     }
 
     @BindingAdapter(value = {"eventColor", "eventProgramStage", "eventProgram"})
-    public static void setEventColor(View view, EventModel event, ProgramStageModel programStage, ProgramModel program) {
+    public static void setEventColor(View view, Event event, ProgramStage programStage, Program program) {
         if (event != null) {
             int bgColor;
             if (DateUtils.getInstance().isEventExpired(null, event.completedDate(), program.completeEventsExpiryDays())) {
@@ -314,7 +289,13 @@ public class Bindings {
                             bgColor = R.drawable.item_event_gray_ripple;
                         break;
                     case SCHEDULE:
-                        if (DateUtils.getInstance().hasExpired(event, program.expiryDays(), program.completeEventsExpiryDays(), programStage.periodType() != null ? programStage.periodType() : program.expiryPeriodType())) {
+                        if (DateUtils.getInstance().isEventExpired(
+                                event.dueDate(),
+                                null,
+                                event.status(),
+                                program.completeEventsExpiryDays(),
+                                programStage.periodType() != null ? programStage.periodType() : program.expiryPeriodType(),
+                                program.expiryDays())) {
                             bgColor = R.drawable.item_event_dark_gray_ripple;
                         } else
                             bgColor = R.drawable.item_event_green_ripple;
@@ -330,26 +311,6 @@ public class Bindings {
             }
             view.setBackground(AppCompatResources.getDrawable(view.getContext(), bgColor));
         }
-    }
-
-    @BindingAdapter("statusColor")
-    public static void setStatusColor(ImageView view, ImportStatus status) {
-        Drawable icon;
-        switch (status) {
-            case ERROR:
-                icon = AppCompatResources.getDrawable(view.getContext(), R.drawable.red_circle);
-                break;
-            case SUCCESS:
-                icon = AppCompatResources.getDrawable(view.getContext(), R.drawable.green_circle);
-                break;
-            case WARNING:
-                icon = AppCompatResources.getDrawable(view.getContext(), R.drawable.yellow_circle);
-                break;
-            default:
-                icon = null;
-                break;
-        }
-        view.setImageDrawable(icon);
     }
 
     @BindingAdapter("eventWithoutRegistrationStatusText")
@@ -378,13 +339,7 @@ public class Bindings {
         }
     }
 
-    @BindingAdapter("eventWithoutRegistrationStatusIcon")
-    public static void setEventWithoutRegistrationStatusIcon(ImageView imageView, ProgramEventViewModel event) {
-        if (event.eventStatus() == EventStatus.ACTIVE && !event.isExpired())
-            imageView.setImageResource(R.drawable.ic_edit);
-        else
-            imageView.setImageResource(R.drawable.ic_visibility);
-    }
+
 
     @BindingAdapter("stateText")
     public static void setStateText(TextView textView, State state) {
@@ -395,9 +350,6 @@ public class Bindings {
             case TO_UPDATE:
                 textView.setText(textView.getContext().getString(R.string.state_to_update));
                 break;
-            case TO_DELETE:
-                textView.setText(textView.getContext().getString(R.string.state_to_delete));
-                break;
             case ERROR:
                 textView.setText(textView.getContext().getString(R.string.state_error));
                 break;
@@ -407,47 +359,6 @@ public class Bindings {
             default:
                 break;
         }
-    }
-
-    @BindingAdapter("stateIcon")
-    public static void setStateIcon(ImageView imageView, State state) {
-        if (state != null) {
-            switch (state) {
-                case TO_POST:
-                case TO_UPDATE:
-                    imageView.setImageResource(R.drawable.ic_sync_problem_grey);
-                    break;
-                case ERROR:
-                    imageView.setImageResource(R.drawable.ic_sync_problem_red);
-                    break;
-                case SYNCED:
-                    imageView.setImageResource(R.drawable.ic_sync);
-                    break;
-                case WARNING:
-                    imageView.setImageResource(R.drawable.ic_sync_warning);
-                    break;
-                case SENT_VIA_SMS:
-                case SYNCED_VIA_SMS:
-                    imageView.setImageResource(R.drawable.ic_sync_sms);
-                    break;
-                case TO_DELETE:
-                    imageView.setImageResource(R.drawable.ic_delete);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-
-    @BindingAdapter("spinnerOptions")
-    public static void setSpinnerOptions(Spinner spinner, List<CategoryOptionComboModel> options) {
-        CatComboAdapter adapter = new CatComboAdapter(spinner.getContext(),
-                R.layout.spinner_layout,
-                R.id.spinner_text,
-                options,
-                "",
-                R.color.white_faf);
-        spinner.setAdapter(adapter);
     }
 
     @BindingAdapter("fromResBgColor")
@@ -495,28 +406,6 @@ public class Bindings {
         }
     }
 
-    public static void setObjectStyle(View view, View itemView, ObjectStyleModel objectStyle) {
-        if (objectStyle.icon() != null) {
-            Resources resources = view.getContext().getResources();
-            String iconName = objectStyle.icon().startsWith("ic_") ? objectStyle.icon() : "ic_" + objectStyle.icon();
-            int icon = resources.getIdentifier(iconName, "drawable", view.getContext().getPackageName());
-            if (view instanceof ImageView)
-                ((ImageView) view).setImageResource(icon);
-        }
-
-        if (objectStyle.color() != null) {
-            String color = objectStyle.color().startsWith("#") ? objectStyle.color() : "#" + objectStyle.color();
-            int colorRes;
-            if (color.length() == 4)
-                colorRes = ContextCompat.getColor(view.getContext(), R.color.colorPrimary);
-            else
-                colorRes = Color.parseColor(color);
-
-            itemView.setBackgroundColor(colorRes);
-            setFromResBgColor(view, colorRes);
-        }
-    }
-
     @BindingAdapter("imageBackground")
     public static void setImageBackground(ImageView imageView, Drawable drawable) {
 
@@ -532,18 +421,6 @@ public class Bindings {
 
         imageView.setBackground(drawable);
 
-    }
-
-    @BindingAdapter("searchOrAdd")
-    public static void setFabIcoin(FloatingActionButton fab, boolean needSearch) {
-        Drawable drawable;
-        if (needSearch) {
-            drawable = AppCompatResources.getDrawable(fab.getContext(), R.drawable.ic_search);
-        } else {
-            drawable = AppCompatResources.getDrawable(fab.getContext(), R.drawable.ic_add_accent);
-        }
-        fab.setColorFilter(Color.WHITE);
-        fab.setImageDrawable(drawable);
     }
 
     @BindingAdapter("versionVisibility")
@@ -563,10 +440,100 @@ public class Bindings {
     public static void setIconTint(ImageView view, boolean followUp) {
         Drawable wrappedDrawable = DrawableCompat.wrap(view.getDrawable());
         Drawable mutableDrawable = wrappedDrawable.mutate();
-        if(followUp)
+        if (followUp)
             DrawableCompat.setTint(mutableDrawable, ContextCompat.getColor(view.getContext(), R.color.white));
         else
             DrawableCompat.setTint(mutableDrawable, ContextCompat.getColor(view.getContext(), R.color.text_black_333));
 
+    }
+
+    @BindingAdapter("networkVisibility")
+    public static void setNetworkVisibility(View view, boolean checkNetwork) {
+        if (checkNetwork) {
+            view.setVisibility(NetworkUtils.isOnline(view.getContext()) ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    @BindingAdapter(value = {"catComboAdapterData", "catComboAdapterTitle"})
+    public static void setCatComboAdapter(AppCompatSpinner spinner, List<CategoryOptionCombo> catComboAdapterData, String catComboAdapterTitle) {
+        CatComboAdapter spinnerAdapter = new CatComboAdapter(spinner.getContext(),
+                R.layout.spinner_layout,
+                R.id.spinner_text,
+                catComboAdapterData != null ? catComboAdapterData : new ArrayList<>(),
+                catComboAdapterTitle,
+                R.color.white_faf);
+
+        spinner.setAdapter(spinnerAdapter);
+    }
+
+    @BindingAdapter("onCatComboSelected")
+    public static void setOnCatComboSelected(AppCompatSpinner spinner, CatOptionComboFilter itemFilter) {
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long l) {
+                if (position != 0) {
+                    itemFilter.selectCatOptionCombo(position - 1);
+                    spinner.setSelection(0);
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+
+            }
+        });
+    }
+
+    @BindingAdapter(value = {"dataSetStatus"})
+    public static void setDataSetStatusIcon(ImageView view, Boolean isComplete) {
+        int drawableResource = isComplete ? R.drawable.ic_event_status_complete : R.drawable.ic_event_status_open;
+        view.setImageDrawable(
+                AppCompatResources.getDrawable(
+                        view.getContext(),
+                        drawableResource
+                )
+        );
+        view.setTag(drawableResource);
+    }
+
+    @BindingAdapter("textStyle")
+    public static void setTextStyle(TextView textView, int style) {
+        switch (style) {
+            case Typeface.BOLD:
+                textView.setTypeface(null, Typeface.BOLD);
+                break;
+            default:
+                textView.setTypeface(null, Typeface.NORMAL);
+                break;
+
+        }
+    }
+
+    @BindingAdapter("clipCorners")
+    public static void setClipCorners(View view, int cornerRadiusInDp) {
+        ViewExtensionsKt.clipWithRoundedCorners(view, ExtensionsKt.getDp(cornerRadiusInDp));
+    }
+
+    @BindingAdapter("clipAllCorners")
+    public static void setAllClipCorners(View view, int cornerRadiusInDp) {
+        ViewExtensionsKt.clipWithAllRoundedCorners(view, ExtensionsKt.getDp(cornerRadiusInDp));
+    }
+
+    @BindingAdapter("fabVisibility")
+    public static void setFabVisibility(FloatingActionButton fab, boolean isVisible) {
+        if (isVisible) {
+            fab.show();
+        } else {
+            fab.hide();
+        }
+    }
+
+    @BindingAdapter("viewVisibility")
+    public static void setViewVisibility(View view, boolean isVisible) {
+        if (isVisible) {
+            ViewAnimationsKt.show(view);
+        } else {
+            ViewAnimationsKt.hide(view);
+        }
     }
 }

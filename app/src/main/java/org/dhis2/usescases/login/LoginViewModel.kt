@@ -4,13 +4,9 @@ import android.text.TextUtils.isEmpty
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import org.dhis2.data.tuples.Trio
+import org.dhis2.commons.data.tuples.Trio
 import org.dhis2.utils.TestingCredential
-import java.util.*
 
-/**
- * QUADRAM. Created by ppajuelo on 20/03/2019.
- */
 class LoginViewModel : ViewModel() {
 
     val serverUrl = MutableLiveData<String>()
@@ -32,14 +28,14 @@ class LoginViewModel : ViewModel() {
         if (serverUrl.toString() != this.serverUrl.value) {
             this.serverUrl.value = serverUrl.toString()
             checkData()
-            if (this.serverUrl.value != null)
+            if (this.serverUrl.value != null) {
                 checkTestingEnvironment(this.serverUrl.value!!)
+            }
         }
     }
 
     fun onUserChanged(userName: CharSequence, start: Int, before: Int, count: Int) {
         if (userName.toString() != this.userName.value) {
-
             this.userName.value = userName.toString()
             checkData()
         }
@@ -53,18 +49,23 @@ class LoginViewModel : ViewModel() {
     }
 
     private fun checkData() {
-        val newValue = !isEmpty(serverUrl.value) && !isEmpty(userName.value) && !isEmpty(password.value)
-        if (isDataComplete.value == null || isDataComplete.value != newValue)
+        val newValue =
+            !isEmpty(serverUrl.value) && !isEmpty(userName.value) && !isEmpty(password.value)
+        if (isDataComplete.value == null || isDataComplete.value != newValue) {
             isDataComplete.value = newValue
+        }
     }
 
-
     private fun checkTestingEnvironment(serverUrl: String) {
-        if (testingCredentials!!.containsKey(serverUrl) && testingCredentials!![serverUrl] != null)
-            isTestingEnvironment.value = Trio.create(serverUrl,
-                    testingCredentials!![serverUrl]!!.user_name,
-                    testingCredentials!![serverUrl]!!.user_pass)
-
+        if (testingCredentials!!.containsKey(serverUrl) &&
+            testingCredentials!![serverUrl] != null
+        ) {
+            isTestingEnvironment.value = Trio.create(
+                serverUrl,
+                testingCredentials!![serverUrl]!!.user_name,
+                testingCredentials!![serverUrl]!!.user_pass
+            )
+        }
     }
 
     fun setTestingCredentials(testingCredentials: List<TestingCredential>) {
@@ -72,5 +73,10 @@ class LoginViewModel : ViewModel() {
         for (testingCredential in testingCredentials) {
             this.testingCredentials!![testingCredential.server_url] = testingCredential
         }
+    }
+
+    fun setAccountInfo(serverUrl: String?, userName: String?) {
+        this.serverUrl.value = serverUrl
+        this.userName.value = userName
     }
 }

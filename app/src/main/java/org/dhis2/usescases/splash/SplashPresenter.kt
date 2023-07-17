@@ -1,62 +1,88 @@
 package org.dhis2.usescases.splash
 
-
-import android.content.Context
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.schedulers.Schedulers
-import org.dhis2.data.prefs.Preference
-import org.dhis2.data.server.UserManager
-import org.dhis2.usescases.login.LoginActivity
-import org.dhis2.usescases.main.MainActivity
-import org.dhis2.usescases.sync.SyncActivity
-import org.dhis2.utils.Constants
-import timber.log.Timber
 import java.util.concurrent.TimeUnit
+import org.dhis2.commons.Constants
+import org.dhis2.commons.Constants.SERVER
+import org.dhis2.commons.Constants.USER
+import org.dhis2.commons.prefs.Preference
+import org.dhis2.commons.prefs.PreferenceProvider
+import org.dhis2.commons.reporting.CrashReportController
+import org.dhis2.commons.schedulers.SchedulerProvider
+import org.dhis2.data.server.UserManager
+import timber.log.Timber
 
-class SplashPresenter internal constructor(private val userManager: UserManager?) : SplashContracts.Presenter {
-    private var view: SplashContracts.View? = null
+class SplashPresenter internal constructor(
+    private var view: SplashView,
+    private val userManager: UserManager?,
+    private val schedulerProvider: SchedulerProvider,
+    private val preferenceProvider: PreferenceProvider,
+    private val crashReportController: CrashReportController
+) {
+
     var compositeDisposable: CompositeDisposable = CompositeDisposable()
 
-    override fun destroy() {
+    fun destroy() {
         compositeDisposable.clear()
     }
 
-    override fun init(view: SplashContracts.View) {
-        this.view = view
+    fun init() {
+        preferenceProvider.sharedPreferences().all.forEach {
+            when (it.key) {
+                Constants.PREFS_URLS, Constants.PREFS_USERS -> {
+                }
+                else -> preferenceProvider.setValue(it.key, it.value)
+            }
+        }
         isUserLoggedIn()
     }
 
-    override fun isUserLoggedIn() {
-        if (userManager == null)
-            navigateTo(LoginActivity::class.java)
-        else
-            compositeDisposable.add(userManager.isUserLoggedIn
-                    .delay(2000, TimeUnit.MILLISECONDS, Schedulers.io())
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
+    private fun isUserLoggedIn() {
+        userManager?.let { userManager ->
+            compositeDisposable.add(
+                userManager.isUserLoggedIn
+                    .delay(2000, TimeUnit.MILLISECONDS, schedulerProvider.io())
+                    .subscribeOn(schedulerProvider.io())
+                    .observeOn(schedulerProvider.ui())
                     .subscribe(
-                            {
-                                val prefs = view!!.abstracContext.getSharedPreferences(
-                                        Constants.SHARE_PREFS, Context.MODE_PRIVATE)
-                                val sessionLocked = prefs.getBoolean("SessionLocked", false)
-                                val initialSyncDone = prefs.getBoolean(Preference.INITIAL_SYNC_DONE.name, false)
-
-                                if (it!! && initialSyncDone && !sessionLocked) {
-                                    navigateTo(MainActivity::class.java)
-                                } else if (it && !initialSyncDone) {
-                                    navigateTo(SyncActivity::class.java)
-                                } else {
-                                    navigateTo(LoginActivity::class.java)
-                                }
-                            },
-                            { Timber.d(it) }
-                    ))
+                        { userLogged ->
+                            if (userLogged) {
+                                trackUserInfo()
+                            }
+                            view.goToNextScreen(
+                                userLogged,
+                                preferenceProvider.getBoolean(
+                                    Preference.SESSION_LOCKED, false
+                                ),
+                                preferenceProvider.getBoolean(
+                                    Preference.INITIAL_METADATA_SYNC_DONE, false
+                                ),
+                                preferenceProvider.getBoolean(
+                                    Preference.INITIAL_DATA_SYNC_DONE,
+                                    false
+                                )
+                            )
+                        },
+                        { Timber.d(it) }
+                    )
+            )
+        } ?: view.goToNextScreen(
+            false,
+            sessionLocked = false,
+            initialSyncDone = false,
+            initialDataSyncDone = false
+        )
     }
 
+    private fun trackUserInfo() {
+        val username = preferenceProvider.getString(USER)
+        val server = preferenceProvider.getString(SERVER)
 
-    override fun navigateTo(data: Class<*>) {
-        view!!.startActivity(data, null, true, true, null)
+        crashReportController.trackServer(server)
+        crashReportController.trackUser(username, server)
     }
 
+    fun getAccounts(): Int {
+        return userManager?.d2?.userModule()?.accountManager()?.getAccounts()?.count() ?: 0
+    }
 }

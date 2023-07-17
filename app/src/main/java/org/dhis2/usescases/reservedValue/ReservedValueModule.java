@@ -2,38 +2,47 @@ package org.dhis2.usescases.reservedValue;
 
 import android.content.Context;
 
-import com.squareup.sqlbrite2.BriteDatabase;
-
-import org.dhis2.data.dagger.PerActivity;
+import org.dhis2.R;
+import org.dhis2.commons.di.dagger.PerActivity;
+import org.dhis2.commons.prefs.PreferenceProvider;
+import org.dhis2.commons.schedulers.SchedulerProvider;
 import org.hisp.dhis.android.core.D2;
 
 import dagger.Module;
 import dagger.Provides;
+import io.reactivex.processors.FlowableProcessor;
+import io.reactivex.processors.PublishProcessor;
 
 @Module
 public class ReservedValueModule {
 
-    private Context context;
+    private ReservedValueView view;
 
-    public ReservedValueModule(Context context) {
-        this.context = context;
+    ReservedValueModule(ReservedValueActivity view) {
+        this.view = view;
     }
 
     @PerActivity
     @Provides
-    ReservedValueContracts.View provideView(ReservedValueActivity activity) {
-        return activity;
+    ReservedValuePresenter providePresenter(ReservedValueRepository repository, SchedulerProvider schedulerProvider, FlowableProcessor<String> refillProcessor) {
+        return new ReservedValuePresenter(repository, schedulerProvider, view, refillProcessor);
     }
 
     @PerActivity
     @Provides
-    ReservedValueContracts.Presenter providePresenter(ReservedValueRepository repository, D2 d2) {
-        return new ReservedValuePresenter(repository, d2);
+    ReservedValueRepository provideRepository(D2 d2, ReservedValueMapper mapper, PreferenceProvider preferenceProvider) {
+        return new ReservedValueRepositoryImpl(d2, preferenceProvider, mapper);
     }
 
     @PerActivity
     @Provides
-    ReservedValueRepository provideRepository(BriteDatabase briteDatabase, D2 d2) {
-        return new ReservedValueRepositoryImpl(briteDatabase, d2);
+    FlowableProcessor<String> refillProcessor() {
+        return PublishProcessor.create();
+    }
+
+    @PerActivity
+    @Provides
+    ReservedValueMapper reservedValueMapper(Context context, FlowableProcessor<String> refillProcessor) {
+        return new ReservedValueMapper(refillProcessor, context.getString(R.string.reserved_values_left));
     }
 }

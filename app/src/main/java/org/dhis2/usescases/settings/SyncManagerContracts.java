@@ -1,12 +1,14 @@
 package org.dhis2.usescases.settings;
 
-import org.dhis2.data.tuples.Pair;
 import org.dhis2.usescases.general.AbstractActivityContracts;
-import org.hisp.dhis.android.core.imports.TrackerImportConflict;
+import org.dhis2.usescases.settings.models.DataSettingsViewModel;
+import org.dhis2.usescases.settings.models.ErrorViewModel;
+import org.dhis2.usescases.settings.models.MetadataSettingsViewModel;
+import org.dhis2.usescases.settings.models.ReservedValueSettingsViewModel;
+import org.dhis2.usescases.settings.models.SMSSettingsViewModel;
+import org.dhis2.usescases.settings.models.SyncParametersViewModel;
 
 import java.util.List;
-
-import io.reactivex.functions.Consumer;
 
 /**
  * QUADRAM. Created by lmartin on 21/03/2018.
@@ -16,15 +18,15 @@ public class SyncManagerContracts {
 
     interface View extends AbstractActivityContracts.View {
 
-        Consumer<Pair<Integer, Integer>> setSyncData();
+        void showInvalidGatewayError();
 
-        void wipeDatabase();
+        void hideGatewayError();
 
         void deleteLocalData();
 
         void showTutorial();
 
-        void showSyncErrors(List<TrackerImportConflict> data);
+        void showSyncErrors(List<ErrorViewModel> data);
 
         void showLocalDataDeleted(boolean error);
 
@@ -32,45 +34,38 @@ public class SyncManagerContracts {
 
         void syncMeta();
 
-        void openItem(int settingsItem);
-    }
+        void openItem(SettingItem settingsItem);
 
-    public interface Presenter {
+        void displaySMSRefreshingData();
 
-        void onItemClick(int itemPosition);
+        void displaySMSEnabled(boolean isChecked);
 
-        void init(SyncManagerContracts.View view);
+        void requestNoEmptySMSGateway();
 
-        void syncData(int seconds, String scheduleTag);
+        void setDataSettings(DataSettingsViewModel dataSettings);
 
-        void syncMeta(int seconds, String scheduleTag);
+        void setMetadataSettings(MetadataSettingsViewModel metadataSettings);
 
-        void syncData();
+        void setParameterSettings(SyncParametersViewModel parameterSettings);
 
-        void syncMeta();
+        void setSMSSettings(SMSSettingsViewModel smsSettingsViewModel);
 
-        void disponse();
+        void setReservedValuesSettings(ReservedValueSettingsViewModel reservedValueSettingsViewModel);
 
-        void resetSyncParameters();
+        void displaySmsEnableError();
 
-        void onWipeData();
+        void onMetadataSyncInProgress();
 
-        void wipeDb();
+        void onMetadataFinished();
 
-        void onDeleteLocalData();
+        void onDataSyncInProgress();
 
-        void deleteLocalData();
+        void onDataFinished();
 
-        void onReservedValues();
+        boolean isGatewayValid();
 
-        void checkSyncErrors();
+        boolean isResultTimeoutValid();
 
-        void checkData();
-
-        void cancelPendingWork(String meta);
-
-        boolean dataHasErrors();
-
-        boolean dataHasWarnings();
+        void enabledSMSSwitchAndSender(SMSSettingsViewModel settingsViewModel);
     }
 }

@@ -3,21 +3,21 @@ package org.dhis2.data.service;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.work.Data;
+import androidx.work.ForegroundInfo;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
-import com.google.firebase.perf.metrics.AddTrace;
-
 import org.dhis2.App;
 import org.dhis2.R;
-import org.dhis2.utils.Constants;
+import org.dhis2.commons.network.NetworkUtils;
+import org.dhis2.commons.prefs.PreferenceProvider;
+import org.dhis2.commons.Constants;
 import org.dhis2.utils.DateUtils;
 
 import java.util.Calendar;
@@ -27,9 +27,7 @@ import javax.inject.Inject;
 
 import timber.log.Timber;
 
-/**
- * QUADRAM. Created by ppajuelo on 23/10/2018.
- */
+import static org.dhis2.utils.analytics.AnalyticsConstants.DATA_TIME;
 
 public class SyncDataWorker extends Worker {
 
@@ -39,6 +37,9 @@ public class SyncDataWorker extends Worker {
     @Inject
     SyncPresenter presenter;
 
+    @Inject
+    PreferenceProvider prefs;
+
     public SyncDataWorker(
             @NonNull Context context,
             @NonNull WorkerParameters workerParams) {
@@ -47,41 +48,105 @@ public class SyncDataWorker extends Worker {
 
     @NonNull
     @Override
-    @AddTrace(name = "DataSyncTrace")
     public Result doWork() {
-
         Objects.requireNonNull(((App) getApplicationContext()).userComponent()).plus(new SyncDataWorkerModule()).inject(this);
+
+        presenter.initSyncControllerMap();
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                getApplicationContext().getString(R.string.syncing_data));
+                getApplicationContext().getString(R.string.syncing_data),
+                0);
 
         boolean isEventOk = true;
         boolean isTeiOk = true;
+        boolean isDataValue = true;
+
+        long init = System.currentTimeMillis();
+
+        triggerNotification(
+                getApplicationContext().getString(R.string.app_name),
+                getApplicationContext().getString(R.string.syncing_events),
+                25);
 
         try {
-            presenter.syncAndDownloadEvents(getApplicationContext());
+            presenter.syncAndDownloadEvents();
         } catch (Exception e) {
+            if(!new NetworkUtils(getApplicationContext()).isOnline()){
+                presenter.setNetworkUnavailable();
+            }
             Timber.e(e);
             isEventOk = false;
         }
+
+        triggerNotification(
+                getApplicationContext().getString(R.string.app_name),
+                getApplicationContext().getString(R.string.syncing_teis),
+                50);
+
         try {
-            presenter.syncAndDownloadTeis(getApplicationContext());
+            presenter.syncAndDownloadTeis();
         } catch (Exception e) {
+            if(!new NetworkUtils(getApplicationContext()).isOnline()){
+                presenter.setNetworkUnavailable();
+            }
             Timber.e(e);
             isTeiOk = false;
         }
 
-        String lastDataSyncDate = DateUtils.dateTimeFormat().format(Calendar.getInstance().getTime());
-        boolean syncOk = presenter.checkSyncStatus();
+        triggerNotification(
+                getApplicationContext().getString(R.string.app_name),
+                getApplicationContext().getString(R.string.syncing_data_sets),
+                75);
 
-        SharedPreferences prefs = getApplicationContext().getSharedPreferences(Constants.SHARE_PREFS, Context.MODE_PRIVATE);
-        prefs.edit().putString(Constants.LAST_DATA_SYNC, lastDataSyncDate).apply();
-        prefs.edit().putBoolean(Constants.LAST_DATA_SYNC_STATUS, isEventOk && isTeiOk && syncOk).apply();
+        try {
+            presenter.syncAndDownloadDataValues();
+        } catch (Exception e) {
+            if(!new NetworkUtils(getApplicationContext()).isOnline()){
+                presenter.setNetworkUnavailable();
+            }
+            Timber.e(e);
+            isDataValue = false;
+        }
+
+        triggerNotification(
+                getApplicationContext().getString(R.string.app_name),
+                getApplicationContext().getString(R.string.syncing_resources),
+                90);
+
+        try {
+            presenter.downloadResources();
+        } catch (Exception e) {
+            Timber.e(e);
+        }
+
+        triggerNotification(
+                getApplicationContext().getString(R.string.app_name),
+                getApplicationContext().getString(R.string.syncing_done),
+                100);
+
+        presenter.logTimeToFinish(System.currentTimeMillis() - init, DATA_TIME);
+
+        String lastDataSyncDate = DateUtils.dateTimeFormat().format(Calendar.getInstance().getTime());
+        SyncResult syncResult = presenter.checkSyncStatus();
+
+        prefs.setValue(Constants.LAST_DATA_SYNC, lastDataSyncDate);
+        prefs.setValue(Constants.LAST_DATA_SYNC_STATUS, isEventOk && isTeiOk && isDataValue && syncResult == SyncResult.SYNC);
+        prefs.setValue(Constants.SYNC_RESULT, syncResult.name());
 
         cancelNotification();
 
+        presenter.startPeriodicDataWork();
+
+        presenter.finishSync();
+
         return Result.success(createOutputData(true));
+    }
+
+    @Override
+    public void onStopped() {
+        cancelNotification();
+        super.onStopped();
     }
 
     private Data createOutputData(boolean state) {
@@ -90,7 +155,7 @@ public class SyncDataWorker extends Worker {
                 .build();
     }
 
-    private void triggerNotification(String title, String content) {
+    private void triggerNotification(String title, String content, int progress) {
         NotificationManager notificationManager = (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -102,12 +167,15 @@ public class SyncDataWorker extends Worker {
                 new NotificationCompat.Builder(getApplicationContext(), DATA_CHANNEL)
                         .setSmallIcon(R.drawable.ic_sync)
                         .setContentTitle(title)
-                        .setOngoing(true)
                         .setContentText(content)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
                         .setAutoCancel(false)
+                        .setProgress(100, progress, false)
                         .setPriority(NotificationCompat.PRIORITY_DEFAULT);
 
-        notificationManager.notify(SyncDataWorker.SYNC_DATA_ID, notificationBuilder.build());
+        setForegroundAsync(new ForegroundInfo(SyncDataWorker.SYNC_DATA_ID, notificationBuilder.build()));
+
     }
 
     private void cancelNotification() {

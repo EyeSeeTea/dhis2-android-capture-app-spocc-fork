@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layout xmlns:app="http://schemas.android.com/apk/res-auto"
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
     <data>
 
         <import type="android.view.View" />
-
-        <import type="java.lang.String" />
 
         <variable
             name="presenter"
@@ -15,11 +14,16 @@
         <variable
             name="enrollment"
             type="org.dhis2.usescases.teiDashboard.teiProgramList.EnrollmentViewModel" />
+
+        <variable
+            name="style"
+            type="org.hisp.dhis.android.core.common.ObjectStyle" />
     </data>
 
-    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:onClick="@{()->presenter.onActiveEnrollClick(enrollment)}"
         android:background="@color/white"
         android:orientation="vertical">
 
@@ -39,14 +43,12 @@
                 android:alpha="0.5"
                 tools:background="@drawable/photo_temp">
 
-                <ImageView
-
+                <androidx.compose.ui.platform.ComposeView
                     android:id="@+id/programImage"
                     android:layout_width="56dp"
                     android:layout_height="56dp"
                     android:layout_centerInParent="true"
-                    android:padding="3dp"
-                    app:srcCompat="@drawable/ic_program_default" />
+                    app:set_metadata_icon="@{style}" />
             </RelativeLayout>
 
 
@@ -121,7 +123,7 @@
                 android:layout_weight="0.4"
                 android:alpha="0.5"
                 android:contentDescription='@{enrollment.uid()}'
-                android:tint="@color/colorGreyDefault"
+                app:tint="@color/colorGreyDefault"
                 app:srcCompat="@drawable/ic_keyboard_arrow_right" />
         </LinearLayout>
 
