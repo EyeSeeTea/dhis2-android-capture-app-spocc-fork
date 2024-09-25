@@ -564,6 +564,7 @@ class TEIDataFragment : FragmentGlobalAbstract(), TEIDataContracts.View {
         bundle.putSerializable(Constants.EVENT_PERIOD_TYPE, programStage.periodType())
         bundle.putString(Constants.PROGRAM_STAGE_UID, programStage.uid())
         bundle.putInt(Constants.EVENT_SCHEDULE_INTERVAL, programStage.standardInterval() ?: 0)
+        bundle.putBoolean(Constants.DISABLE_SELECT_ORG_UNIT, true)
         intent.putExtras(bundle)
         eventInitialLauncher.launch(intent)
     }

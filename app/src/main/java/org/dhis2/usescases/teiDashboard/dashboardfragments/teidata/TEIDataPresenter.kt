@@ -397,6 +397,7 @@ class TEIDataPresenter(
                     dashboardModel?.currentEnrollment?.uid(),
                     0,
                     dashboardModel?.currentEnrollment?.status(),
+                    true
                 ),
             )
             view.openEventInitial(intent)

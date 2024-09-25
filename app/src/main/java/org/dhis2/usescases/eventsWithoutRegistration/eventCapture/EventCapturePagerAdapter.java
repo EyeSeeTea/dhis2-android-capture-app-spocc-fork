@@ -36,7 +36,7 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
     private final boolean shouldOpenErrorSection;
 
     public boolean isFormScreenShown(@Nullable Integer currentItem) {
-        return currentItem!=null && pages.get(currentItem) == EventPageType.DATA_ENTRY;
+        return currentItem != null && pages.get(currentItem) == EventPageType.DATA_ENTRY;
     }
 
     private enum EventPageType {
