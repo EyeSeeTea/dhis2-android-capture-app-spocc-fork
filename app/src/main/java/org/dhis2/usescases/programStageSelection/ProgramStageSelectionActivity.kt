@@ -96,6 +96,7 @@ class ProgramStageSelectionActivity : ActivityGlobalAbstract(), ProgramStageSele
                 Constants.EVENT_SCHEDULE_INTERVAL,
                 presenter.getStandardInterval(programStageUid),
             )
+            putBoolean(Constants.DISABLE_SELECT_ORG_UNIT, true)
         }
 
         intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT)

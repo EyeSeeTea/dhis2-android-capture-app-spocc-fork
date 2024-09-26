@@ -44,6 +44,7 @@ import org.hisp.dhis.mobile.ui.designsystem.component.InputOrgUnit
 import org.hisp.dhis.mobile.ui.designsystem.component.InputPolygon
 import org.hisp.dhis.mobile.ui.designsystem.component.InputRadioButton
 import org.hisp.dhis.mobile.ui.designsystem.component.InputShellState
+import org.hisp.dhis.mobile.ui.designsystem.component.InputText
 import org.hisp.dhis.mobile.ui.designsystem.component.Orientation
 import org.hisp.dhis.mobile.ui.designsystem.component.RadioButtonData
 import org.hisp.dhis.mobile.ui.designsystem.component.internal.DateTransformation
@@ -182,6 +183,7 @@ fun ProvideOrgUnit(
     onClear: () -> Unit,
     required: Boolean = false,
     showField: Boolean = true,
+    enabled: Boolean = false,
 ) {
     if (showField) {
         Spacer(modifier = Modifier.height(16.dp))
@@ -191,21 +193,36 @@ fun ProvideOrgUnit(
             mutableStateOf(orgUnit.selectedOrgUnit?.displayName())
         }
 
-        InputOrgUnit(
-            title = resources.getString(R.string.org_unit),
-            state = state,
-            inputText = inputFieldValue ?: "",
-            onValueChanged = {
-                inputFieldValue = it
-                if (it.isNullOrEmpty()) {
-                    onClear()
-                }
-            },
-            onOrgUnitActionCLicked = onOrgUnitClick,
-            isRequiredField = required,
-        )
+        if (enabled){
+            InputOrgUnit(
+                title = resources.getString(R.string.org_unit),
+                state = state,
+                inputText = inputFieldValue ?: "",
+                onValueChanged = {
+                    inputFieldValue = it
+                    if (it.isNullOrEmpty()) {
+                        onClear()
+                    }
+                },
+                onOrgUnitActionCLicked = onOrgUnitClick,
+                isRequiredField = required,
+            )
+        }else {
+            InputText(
+                //modifier = modifier.fillMaxWidth(),
+                title = resources.getString(R.string.org_unit),
+                state = InputShellState.DISABLED,
+                //supportingText = fieldUiModel.supportingText(),
+                //legendData = fieldUiModel.legend(),
+                inputText =  inputFieldValue ?: "",
+                isRequiredField = required,
+                //onNextClicked = onNextClicked,
+
+            )
+        }
     }
 }
+
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable

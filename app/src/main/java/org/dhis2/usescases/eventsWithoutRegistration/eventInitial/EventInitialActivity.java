@@ -73,6 +73,7 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
     private String programStageUid;
     private EnrollmentStatus enrollmentStatus;
     private int eventScheduleInterval;
+    private boolean disableSelectOrgUnit;
 
     private ProgramStage programStage;
     private Program program;
@@ -85,7 +86,8 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
 
     public static Bundle getBundle(String programUid, String eventUid, String eventCreationType,
                                    String teiUid, PeriodType eventPeriodType, String orgUnit, String stageUid,
-                                   String enrollmentUid, int eventScheduleInterval, EnrollmentStatus enrollmentStatus) {
+                                   String enrollmentUid, int eventScheduleInterval, EnrollmentStatus enrollmentStatus,
+                                   boolean disableSelectOrgUnit) {
         Bundle bundle = new Bundle();
         bundle.putString(Constants.PROGRAM_UID, programUid);
         bundle.putString(Constants.EVENT_UID, eventUid);
@@ -97,6 +99,7 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
         bundle.putString(Constants.PROGRAM_STAGE_UID, stageUid);
         bundle.putInt(Constants.EVENT_SCHEDULE_INTERVAL, eventScheduleInterval);
         bundle.putSerializable(Constants.ENROLLMENT_STATUS, enrollmentStatus);
+        bundle.putBoolean(Constants.DISABLE_SELECT_ORG_UNIT, disableSelectOrgUnit);
         return bundle;
     }
 
@@ -113,6 +116,7 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
         programStageUid = getIntent().getStringExtra(Constants.PROGRAM_STAGE_UID);
         enrollmentStatus = (EnrollmentStatus) getIntent().getSerializableExtra(Constants.ENROLLMENT_STATUS);
         eventScheduleInterval = getIntent().getIntExtra(Constants.EVENT_SCHEDULE_INTERVAL, 0);
+        disableSelectOrgUnit = getIntent().getBooleanExtra(Constants.DISABLE_SELECT_ORG_UNIT, disableSelectOrgUnit);
     }
 
     @Override
@@ -143,6 +147,7 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
         bundle.putInt(Constants.EVENT_SCHEDULE_INTERVAL, eventScheduleInterval);
         bundle.putString(Constants.ORG_UNIT, selectedOrgUnit);
         bundle.putSerializable(Constants.ENROLLMENT_STATUS, enrollmentStatus);
+        bundle.putBoolean(Constants.DISABLE_SELECT_ORG_UNIT, disableSelectOrgUnit);
 
         EventDetailsFragment eventDetailsFragment = new EventDetailsFragment();
         eventDetailsFragment.setArguments(bundle);

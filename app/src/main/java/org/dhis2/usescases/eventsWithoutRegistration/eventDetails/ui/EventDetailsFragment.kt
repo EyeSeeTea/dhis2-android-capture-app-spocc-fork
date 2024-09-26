@@ -16,6 +16,8 @@ import androidx.databinding.DataBindingUtil
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import org.dhis2.R
+import org.dhis2.commons.Constants.DISABLE_SELECT_ORG_UNIT
+
 import org.dhis2.commons.Constants.ENROLLMENT_STATUS
 import org.dhis2.commons.Constants.ENROLLMENT_UID
 import org.dhis2.commons.Constants.EVENT_CREATION_TYPE
@@ -132,6 +134,9 @@ class EventDetailsFragment : FragmentGlobalAbstract() {
                     .getSerializable(ENROLLMENT_STATUS) as EnrollmentStatus?,
             ),
         )?.inject(this)
+
+        val disableSelectOrgUnit = requireArguments().getBoolean(DISABLE_SELECT_ORG_UNIT, false)
+
         binding = DataBindingUtil.inflate(
             inflater,
             R.layout.event_details_fragment,
@@ -155,6 +160,7 @@ class EventDetailsFragment : FragmentGlobalAbstract() {
                 catCombo = catCombo,
                 coordinates = coordinates,
                 eventTemp = eventTemp,
+                enable = !disableSelectOrgUnit
             )
         }
         return binding.root
@@ -243,6 +249,7 @@ class EventDetailsFragment : FragmentGlobalAbstract() {
         catCombo: EventCatCombo,
         coordinates: EventCoordinates,
         eventTemp: EventTemp,
+        enable: Boolean
     ) {
         Column {
             ProvideInputDate(
@@ -258,6 +265,7 @@ class EventDetailsFragment : FragmentGlobalAbstract() {
                     showField = date.active,
                 ),
             )
+
             ProvideOrgUnit(
                 orgUnit = orgUnit,
                 detailsEnabled = details.enabled,
@@ -268,6 +276,7 @@ class EventDetailsFragment : FragmentGlobalAbstract() {
                 },
                 required = true,
                 showField = orgUnit.visible,
+                enabled = enable
             )
 
             if (!catCombo.isDefault && catCombo.categories.isNotEmpty()) {

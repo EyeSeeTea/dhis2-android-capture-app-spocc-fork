@@ -303,6 +303,7 @@ class ProgramEventDetailActivity :
             null,
             0,
             null,
+            false
         )
         startActivity(
             EventInitialActivity::class.java,
