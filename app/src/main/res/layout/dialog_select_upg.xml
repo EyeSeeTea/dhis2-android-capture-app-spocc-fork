@@ -36,7 +36,6 @@
                 app:layout_constraintTop_toTopOf="parent"
                 tools:text="Select UPG" />
 
-
             <RelativeLayout
                 android:id="@+id/upg_empty_container"
                 android:layout_width="match_parent"
@@ -70,6 +69,17 @@
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                 app:layout_constraintBottom_toTopOf="@id/cancel_button"
                 app:layout_constraintTop_toBottomOf="@id/title" />
+
+            <ProgressBar
+                android:id="@+id/upg_progress_bar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:progressColor="@{@color/colorPrimary}"/>
 
             <Button
                 android:id="@+id/cancel_button"
