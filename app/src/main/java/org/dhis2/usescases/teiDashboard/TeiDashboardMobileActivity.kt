@@ -571,9 +571,14 @@ class TeiDashboardMobileActivity :
                         popupMenu.menu.findItem(R.id.complete).isVisible = false
                     } else if (status == EnrollmentStatus.CANCELLED) {
                         popupMenu.menu.findItem(R.id.deactivate).isVisible = false
-                    } else {
-                        popupMenu.menu.findItem(R.id.activate).isVisible = false
                     }
+                    // EyeSeeTea customization - re-open always not visible
+                    // is not possible re-open completed enrollments
+               /*     else {
+                        popupMenu.menu.findItem(R.id.activate).isVisible = false
+                    }*/
+                    popupMenu.menu.findItem(R.id.activate).isVisible = false
+
                     if (dashboardViewModel.showFollowUpBar.value) {
                         popupMenu.menu.findItem(R.id.markForFollowUp).isVisible = false
                     }
