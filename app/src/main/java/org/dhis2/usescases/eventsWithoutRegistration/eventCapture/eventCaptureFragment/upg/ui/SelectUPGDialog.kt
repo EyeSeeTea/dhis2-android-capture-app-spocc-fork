@@ -82,6 +82,14 @@ class SelectUPGDialog : DialogFragment(), SelectUPGDialogView {
         dismiss()
     }
 
+    override fun showLoading() {
+        binding.upgProgressBar.visibility = View.VISIBLE
+    }
+
+    override fun hideLoading() {
+        binding.upgProgressBar.visibility = View.GONE
+    }
+
     override fun dismiss() {
         presenter.onDetach()
         if (isDialogShown) {

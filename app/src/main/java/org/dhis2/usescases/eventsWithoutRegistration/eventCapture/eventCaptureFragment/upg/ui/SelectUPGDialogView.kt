@@ -5,4 +5,6 @@ import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFr
 interface SelectUPGDialogView {
     fun renderList(liveData: List<UPGItem>)
     fun onUPGSelected(item: UPGItem)
+    fun showLoading()
+    fun hideLoading()
 }
