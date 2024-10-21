@@ -1,6 +1,7 @@
 package org.dhis2.form.model
 
 import androidx.databinding.ObservableField
+import org.dhis2.commons.orgunitselector.OrgUnitSelectorScope
 import org.dhis2.form.ui.event.RecyclerViewUiEvents
 import org.dhis2.form.ui.event.UiEventFactory
 import org.dhis2.form.ui.intent.FormIntent
@@ -33,7 +34,8 @@ data class SectionUiModelImpl(
     override val renderingType: UiRenderType? = null,
     override val keyboardActionType: KeyboardActionType? = null,
     override val fieldMask: String? = null,
-    var isOpen: Boolean = false,
+    var isOpen: Boolean? = false,
+    override val url: String? = null,
     var totalFields: Int = 0,
     var completedFields: Int = 0,
     var errors: Int = 0,
@@ -41,7 +43,10 @@ data class SectionUiModelImpl(
     var rendering: String? = null,
     var selectedField: ObservableField<String?> = ObservableField(null),
     override val isLoadingData: Boolean = false,
-    override var optionSetConfiguration: OptionSetConfiguration? = null
+    override var optionSetConfiguration: OptionSetConfiguration? = null,
+    override val autocompleteList: List<String>? = null,
+    override val orgUnitSelectorScope: OrgUnitSelectorScope? = null,
+    override val visible: Boolean = true,
 ) : FieldUiModel {
 
     private var sectionNumber: Int = 0
@@ -116,8 +121,8 @@ data class SectionUiModelImpl(
         callback!!.intent(
             OnFocus(
                 uid,
-                value
-            )
+                value,
+            ),
         )
     }
 
@@ -125,8 +130,8 @@ data class SectionUiModelImpl(
         callback?.recyclerViewUiEvents(
             RecyclerViewUiEvents.ShowDescriptionLabelDialog(
                 label,
-                description
-            )
+                description,
+            ),
         )
     }
 
@@ -141,7 +146,7 @@ data class SectionUiModelImpl(
     override val textColor: Int?
         get() = style?.textColor(error, warning)
 
-    override val backGroundColor: Pair<Array<Int>, Int>?
+    override val backGroundColor: Pair<Array<Int>, Int?>?
         get() =
             valueType?.let {
                 style?.backgroundColor(it, error, warning)
@@ -189,6 +194,8 @@ data class SectionUiModelImpl(
     override fun setFieldMandatory() = this.copy(mandatory = true)
 
     override fun isSectionWithFields() = totalFields > 0
+
+    override fun setVisible(editable: Boolean) = this.copy(visible = true)
 
     override fun equals(item: FieldUiModel): Boolean {
         item as SectionUiModelImpl

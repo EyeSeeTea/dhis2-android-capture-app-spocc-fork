@@ -1,5 +1,7 @@
 package org.dhis2.usescases.datasets.datasetInitial;
 
+import static org.dhis2.commons.team.DateToYearlyPeriodKt.dateToYearlyPeriod;
+
 import android.os.Bundle;
 import android.view.View;
 
@@ -10,6 +12,9 @@ import com.google.android.material.textfield.TextInputEditText;
 
 import org.dhis2.App;
 import org.dhis2.R;
+import org.dhis2.commons.Constants;
+import org.dhis2.commons.orgunitselector.OUTreeFragment;
+import org.dhis2.commons.orgunitselector.OrgUnitSelectorScope;
 import org.dhis2.data.dhislogic.CategoryOptionExtensionsKt;
 import org.dhis2.data.dhislogic.DhisPeriodUtils;
 import org.dhis2.data.dhislogic.OrganisationUnitExtensionsKt;
@@ -17,10 +22,8 @@ import org.dhis2.databinding.ActivityDatasetInitialBinding;
 import org.dhis2.databinding.ItemCategoryComboBinding;
 import org.dhis2.usescases.datasets.dataSetTable.DataSetTableActivity;
 import org.dhis2.usescases.general.ActivityGlobalAbstract;
-import org.dhis2.commons.Constants;
 import org.dhis2.utils.category.CategoryDialog;
 import org.dhis2.utils.customviews.CategoryOptionPopUp;
-import org.dhis2.utils.customviews.OrgUnitDialog;
 import org.dhis2.utils.customviews.PeriodDialog;
 import org.dhis2.utils.customviews.PeriodDialogInputPeriod;
 import org.hisp.dhis.android.core.category.Category;
@@ -54,7 +57,6 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
     private OrganisationUnit selectedOrgUnit;
     private Date selectedPeriod;
     private String dataSetUid;
-    private OrgUnitDialog orgUnitDialog;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -64,7 +66,6 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
 
         binding = DataBindingUtil.setContentView(this, R.layout.activity_dataset_initial);
         binding.setPresenter(presenter);
-        orgUnitDialog = OrgUnitDialog.getInstace();
     }
 
     @Override
@@ -107,26 +108,28 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
 
     @Override
     public void showOrgUnitDialog(List<OrganisationUnit> data) {
-        if (!orgUnitDialog.isVisible()) {
-            orgUnitDialog
-                    .setMultiSelection(false)
-                    .setOrgUnits(data)
-                    .setProgram(dataSetUid)
-                    .setTitle(getString(R.string.org_unit))
-                    .setPossitiveListener(v -> {
-                        if (orgUnitDialog.getSelectedOrgUnit() != null && !orgUnitDialog.getSelectedOrgUnit().isEmpty()) {
-                            selectedOrgUnit = orgUnitDialog.getSelectedOrgUnitModel();
-                            if (selectedOrgUnit == null)
-                                orgUnitDialog.dismiss();
-                            binding.dataSetOrgUnitEditText.setText(selectedOrgUnit.displayName());
-                            checkPeriodIsValidForOrgUnit(selectedOrgUnit);
-                        }
-                        checkActionVisivbility();
-                        orgUnitDialog.dismiss();
-                    })
-                    .setNegativeListener(v -> orgUnitDialog.dismiss())
-                    .show(getSupportFragmentManager(), OrgUnitDialog.class.getSimpleName());
+        List<String> preselectedOrgUnits = new ArrayList<>();
+        if (selectedOrgUnit != null) {
+            preselectedOrgUnits.add(selectedOrgUnit.uid());
         }
+
+        new OUTreeFragment.Builder()
+                .showAsDialog()
+                .singleSelection()
+                .withPreselectedOrgUnits(preselectedOrgUnits)
+                .orgUnitScope(new OrgUnitSelectorScope.DataSetCaptureScope(dataSetUid))
+                .onSelection(selectedOrgUnits -> {
+                    if (!selectedOrgUnits.isEmpty()) {
+                        selectedOrgUnit = selectedOrgUnits.get(0);
+                        binding.dataSetOrgUnitEditText.setText(selectedOrgUnit.displayName());
+                        checkPeriodIsValidForOrgUnit(selectedOrgUnit);
+                    }
+                    checkActionVisivbility();
+                    return Unit.INSTANCE;
+                })
+                .withTeamValidationData(dataSetUid, dateToYearlyPeriod(selectedPeriod))
+                .build()
+                .show(getSupportFragmentManager(), OUTreeFragment.class.getSimpleName());
     }
 
     private void checkPeriodIsValidForOrgUnit(OrganisationUnit selectedOrgUnit) {
@@ -150,6 +153,7 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
                     this.selectedPeriod = calendar.getTime();
                     binding.dataSetPeriodEditText.setText(periodUtils.getPeriodUIString(periodType, selectedDate, Locale.getDefault()));
                     checkCatOptionsAreValidForOrgUnit(selectedPeriod);
+                    presenter.checkOrgUnitByPeriodIsActive(selectedOrgUnit, selectedPeriod);
                     checkActionVisivbility();
                     periodDialog.dismiss();
                 })
@@ -163,7 +167,7 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
 
     private void checkCatOptionsAreValidForOrgUnit(Date selectedPeriod) {
         int index = 0;
-        for(Iterator<Map.Entry<String, CategoryOption>> it = selectedCatOptions.entrySet().iterator(); it.hasNext(); index++) {
+        for (Iterator<Map.Entry<String, CategoryOption>> it = selectedCatOptions.entrySet().iterator(); it.hasNext(); index++) {
             CategoryOption categoryOption = it.next().getValue();
             if (categoryOption != null && !CategoryOptionExtensionsKt.inDateRange(categoryOption, selectedPeriod)) {
                 it.remove();
@@ -253,14 +257,16 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
         Bundle bundle = DataSetTableActivity.getBundle(
                 dataSetUid,
                 selectedOrgUnit.uid(),
-                selectedOrgUnit.name(),
-                getPeriodType(),
-                periodUtils.getPeriodUIString(binding.getDataSetModel().periodType(), selectedPeriod, Locale.getDefault()),
                 periodId,
                 catOptionCombo
         );
 
         startActivity(DataSetTableActivity.class, bundle, true, false, null);
+    }
+
+    @Override
+    public void showDeactivatedTeamError() {
+        displayMessage(getString(R.string.deactivated_team_error));
     }
 
     private void checkActionVisivbility() {
@@ -269,6 +275,10 @@ public class DataSetInitialActivity extends ActivityGlobalAbstract implements Da
             visible = false;
         if (selectedPeriod == null)
             visible = false;
+
+        if (!presenter.isOrgUnitByPeriodIsActive(selectedOrgUnit, selectedPeriod))
+            visible = false;
+
         for (String key : selectedCatOptions.keySet()) {
             if (selectedCatOptions.get(key) == null)
                 visible = false;

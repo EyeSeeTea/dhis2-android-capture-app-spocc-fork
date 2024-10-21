@@ -1,5 +1,6 @@
 package org.dhis2.form.model
 
+import org.dhis2.commons.orgunitselector.OrgUnitSelectorScope
 import org.dhis2.form.ui.event.RecyclerViewUiEvents
 import org.dhis2.form.ui.event.UiEventFactory
 import org.dhis2.form.ui.intent.FormIntent
@@ -20,6 +21,8 @@ interface FieldUiModel {
     val error: String?
 
     val editable: Boolean
+
+    val visible: Boolean
 
     val warning: String?
 
@@ -51,7 +54,7 @@ interface FieldUiModel {
 
     val textColor: Int?
 
-    val backGroundColor: Pair<Array<Int>, Int>?
+    val backGroundColor: Pair<Array<Int>, Int?>?
 
     val renderingType: UiRenderType?
 
@@ -68,6 +71,12 @@ interface FieldUiModel {
     val isNegativeChecked: Boolean
 
     val isLoadingData: Boolean
+
+    val autocompleteList: List<String>?
+
+    val orgUnitSelectorScope: OrgUnitSelectorScope?
+
+    val url: String?
 
     fun setCallback(callback: Callback)
 
@@ -102,6 +111,8 @@ interface FieldUiModel {
     fun setError(error: String?): FieldUiModel
 
     fun setEditable(editable: Boolean): FieldUiModel
+
+    fun setVisible(visible: Boolean): FieldUiModel
 
     fun setLegend(legendValue: LegendValue?): FieldUiModel
 

@@ -32,6 +32,8 @@ import org.dhis2.usescases.events.ScheduledEventComponent;
 import org.dhis2.usescases.events.ScheduledEventModule;
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.EventCaptureComponent;
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.EventCaptureModule;
+import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFragment.upg.SelectUPGDialogComponent;
+import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFragment.upg.SelectUPGDialogModule;
 import org.dhis2.usescases.eventsWithoutRegistration.eventDetails.injection.EventDetailsComponent;
 import org.dhis2.usescases.eventsWithoutRegistration.eventDetails.injection.EventDetailsModule;
 import org.dhis2.usescases.eventsWithoutRegistration.eventInitial.EventInitialComponent;
@@ -72,8 +74,6 @@ import org.dhis2.usescases.teiDashboard.TeiDashboardComponent;
 import org.dhis2.usescases.teiDashboard.TeiDashboardModule;
 import org.dhis2.usescases.teiDashboard.dashboardfragments.relationships.RelationshipComponent;
 import org.dhis2.usescases.teiDashboard.dashboardfragments.relationships.RelationshipModule;
-import org.dhis2.usescases.teiDashboard.nfcdata.NfcDataWriteComponent;
-import org.dhis2.usescases.teiDashboard.nfcdata.NfcDataWriteModule;
 import org.dhis2.usescases.teiDashboard.teiProgramList.TeiProgramListComponent;
 import org.dhis2.usescases.teiDashboard.teiProgramList.TeiProgramListModule;
 import org.dhis2.utils.optionset.OptionSetComponent;
@@ -159,8 +159,6 @@ public interface UserComponent extends UserComponentFlavor{
     @NonNull
     SmsComponent plus(SmsModule smsModule);
 
-    NfcDataWriteComponent plus(NfcDataWriteModule nfcModule);
-
     @NonNull
     SyncGranularRxComponent plus(SyncGranularRxModule syncGranularRxModule);
 
@@ -208,4 +206,7 @@ public interface UserComponent extends UserComponentFlavor{
 
     @NonNull
     SessionComponent plus(PinModule pinModule);
+
+    @NonNull
+    SelectUPGDialogComponent plus(@NonNull SelectUPGDialogModule selectUPGDialogModule);
 }

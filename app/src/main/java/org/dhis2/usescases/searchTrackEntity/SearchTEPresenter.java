@@ -1,16 +1,18 @@
 package org.dhis2.usescases.searchTrackEntity;
 
 import static android.app.Activity.RESULT_OK;
-import static org.dhis2.usescases.teiDashboard.dashboardfragments.relationships.RelationshipFragment.TEI_A_UID;
-import static org.dhis2.utils.analytics.AnalyticsConstants.ADD_RELATIONSHIP;
-import static org.dhis2.utils.analytics.AnalyticsConstants.CREATE_ENROLL;
-import static org.dhis2.utils.analytics.AnalyticsConstants.DELETE_RELATIONSHIP;
 import static org.dhis2.commons.matomo.Actions.MAP_VISUALIZATION;
 import static org.dhis2.commons.matomo.Actions.OPEN_ANALYTICS;
 import static org.dhis2.commons.matomo.Actions.SYNC_TEI;
 import static org.dhis2.commons.matomo.Categories.SEARCH;
 import static org.dhis2.commons.matomo.Categories.TRACKER_LIST;
 import static org.dhis2.commons.matomo.Labels.CLICK;
+import static org.dhis2.commons.team.DateToYearlyPeriodKt.dateToYearlyPeriod;
+import static org.dhis2.commons.team.IsActiveOrgUnitKt.isActiveOrgUnit;
+import static org.dhis2.usescases.teiDashboard.dashboardfragments.relationships.RelationshipFragment.TEI_A_UID;
+import static org.dhis2.utils.analytics.AnalyticsConstants.ADD_RELATIONSHIP;
+import static org.dhis2.utils.analytics.AnalyticsConstants.CREATE_ENROLL;
+import static org.dhis2.utils.analytics.AnalyticsConstants.DELETE_RELATIONSHIP;
 
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
@@ -28,18 +30,18 @@ import org.dhis2.commons.filters.DisableHomeFiltersFromSettingsApp;
 import org.dhis2.commons.filters.FilterItem;
 import org.dhis2.commons.filters.FilterManager;
 import org.dhis2.commons.filters.data.FilterRepository;
-import org.dhis2.commons.filters.workingLists.TeiFilterToWorkingListItemMapper;
+import org.dhis2.commons.matomo.MatomoAnalyticsController;
+import org.dhis2.commons.orgunitselector.OUTreeFragment;
+import org.dhis2.commons.orgunitselector.OrgUnitSelectorScope;
 import org.dhis2.commons.prefs.Preference;
 import org.dhis2.commons.prefs.PreferenceProvider;
 import org.dhis2.commons.resources.ColorUtils;
-import org.dhis2.commons.resources.D2ErrorUtils;
 import org.dhis2.commons.resources.ObjectStyleUtils;
+import org.dhis2.commons.resources.ResourceManager;
 import org.dhis2.commons.schedulers.SchedulerProvider;
 import org.dhis2.data.service.SyncStatusController;
 import org.dhis2.maps.model.StageStyle;
 import org.dhis2.utils.analytics.AnalyticsHelper;
-import org.dhis2.commons.matomo.MatomoAnalyticsController;
-import org.dhis2.utils.customviews.OrgUnitDialog;
 import org.hisp.dhis.android.core.D2;
 import org.hisp.dhis.android.core.common.FeatureType;
 import org.hisp.dhis.android.core.maintenance.D2Error;
@@ -49,23 +51,26 @@ import org.hisp.dhis.android.core.program.ProgramStage;
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityType;
 import org.jetbrains.annotations.NotNull;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import io.reactivex.Observable;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.subjects.BehaviorSubject;
+import kotlin.Unit;
 import timber.log.Timber;
 
 public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
 
     private static final Program ALL_TE_TYPES = null;
-    private static final int MAX_NO_SELECTED_PROGRAM_RESULTS = 5;
     private final SearchRepository searchRepository;
     private final D2 d2;
     private final SchedulerProvider schedulerProvider;
@@ -73,19 +78,21 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
     private final AnalyticsHelper analyticsHelper;
     private final BehaviorSubject<String> currentProgram;
     private final PreferenceProvider preferences;
-    private final TeiFilterToWorkingListItemMapper workingListMapper;
     private final FilterRepository filterRepository;
+    private final ResourceManager resourceManager;
     private Program selectedProgram;
 
     private final CompositeDisposable compositeDisposable;
-    private TrackedEntityType trackedEntity;
+    private final TrackedEntityType trackedEntity;
     private Date selectedEnrollmentDate;
 
-    private String trackedEntityType;
+    private final String trackedEntityType;
 
     private final DisableHomeFiltersFromSettingsApp disableHomeFilters;
     private final MatomoAnalyticsController matomoAnalyticsController;
-    private SyncStatusController syncStatusController;
+    private final SyncStatusController syncStatusController;
+
+    private final ColorUtils colorUtils;
 
     public SearchTEPresenter(SearchTEContractsModule.View view,
                              D2 d2,
@@ -95,27 +102,29 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
                              @Nullable String initialProgram,
                              @NonNull String teTypeUid,
                              PreferenceProvider preferenceProvider,
-                             TeiFilterToWorkingListItemMapper workingListMapper,
                              FilterRepository filterRepository,
                              DisableHomeFiltersFromSettingsApp disableHomeFilters,
                              MatomoAnalyticsController matomoAnalyticsController,
-                             SyncStatusController syncStatusController) {
+                             SyncStatusController syncStatusController,
+                             ResourceManager resourceManager,
+                             ColorUtils colorUtils) {
         this.view = view;
         this.preferences = preferenceProvider;
         this.searchRepository = searchRepository;
         this.d2 = d2;
         this.schedulerProvider = schedulerProvider;
         this.analyticsHelper = analyticsHelper;
-        this.workingListMapper = workingListMapper;
         this.filterRepository = filterRepository;
         this.disableHomeFilters = disableHomeFilters;
         this.matomoAnalyticsController = matomoAnalyticsController;
         this.syncStatusController = syncStatusController;
+        this.resourceManager = resourceManager;
         compositeDisposable = new CompositeDisposable();
         selectedProgram = initialProgram != null ? d2.programModule().programs().uid(initialProgram).blockingGet() : null;
         currentProgram = BehaviorSubject.createDefault(initialProgram != null ? initialProgram : "");
         this.trackedEntityType = teTypeUid;
         this.trackedEntity = searchRepository.getTrackedEntityType(trackedEntityType).blockingFirst();
+        this.colorUtils = colorUtils;
     }
 
     //-----------------------------------
@@ -278,7 +287,7 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
     private boolean canCreateTei() {
         boolean programAccess = selectedProgram.access().data().write() != null && selectedProgram.access().data().write();
         boolean teTypeAccess = d2.trackedEntityModule().trackedEntityTypes().uid(
-                selectedProgram.trackedEntityType().uid()
+                Objects.requireNonNull(selectedProgram.trackedEntityType()).uid()
         ).blockingGet().access().data().write();
         return programAccess && teTypeAccess;
     }
@@ -287,24 +296,23 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
     public void enroll(String programUid, String uid, HashMap<String, String> queryData) {
         selectedEnrollmentDate = Calendar.getInstance().getTime();
 
-        OrgUnitDialog orgUnitDialog = OrgUnitDialog.getInstace().setMultiSelection(false);
-        orgUnitDialog.setPossitiveListener(v -> {
-                    if (orgUnitDialog.getSelectedOrgUnit() != null && !orgUnitDialog.getSelectedOrgUnit().isEmpty())
-                        showCalendar(orgUnitDialog.getSelectedOrgUnitModel(), programUid, uid, queryData);
-                    orgUnitDialog.dismiss();
-                })
-                .setNegativeListener(v -> orgUnitDialog.dismiss());
-
         compositeDisposable.add(getOrgUnits()
                 .subscribeOn(schedulerProvider.io())
                 .observeOn(schedulerProvider.ui())
                 .subscribe(
                         allOrgUnits -> {
                             if (allOrgUnits.size() > 1) {
-                                orgUnitDialog.setOrgUnits(allOrgUnits);
-                                orgUnitDialog.setProgram(programUid);
-                                if (!orgUnitDialog.isAdded())
-                                    orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
+                                new OUTreeFragment.Builder()
+                                        .showAsDialog()
+                                        .singleSelection()
+                                        .onSelection(selectedOrgUnits -> {
+                                            if (!selectedOrgUnits.isEmpty())
+                                                showCalendar(selectedOrgUnits.get(0), programUid, uid, queryData);
+                                            return Unit.INSTANCE;
+                                        })
+                                        .orgUnitScope(new OrgUnitSelectorScope.ProgramCaptureScope(programUid))
+                                        .build()
+                                        .show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
                             } else if (allOrgUnits.size() == 1)
                                 showCalendar(allOrgUnits.get(0), programUid, uid, queryData);
                         },
@@ -320,15 +328,15 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
         if (selectedOrgUnit.openingDate() != null)
             minDate = selectedOrgUnit.openingDate();
 
-        if (selectedOrgUnit.closedDate() == null && !selectedProgram.selectEnrollmentDatesInFuture()) {
+        if (selectedOrgUnit.closedDate() == null && Boolean.FALSE.equals(selectedProgram.selectEnrollmentDatesInFuture())) {
             maxDate = new Date(System.currentTimeMillis());
-        } else if (selectedOrgUnit.closedDate() != null && !selectedProgram.selectEnrollmentDatesInFuture()) {
+        } else if (selectedOrgUnit.closedDate() != null && Boolean.FALSE.equals(selectedProgram.selectEnrollmentDatesInFuture())) {
             if (selectedOrgUnit.closedDate().before(new Date(System.currentTimeMillis()))) {
                 maxDate = selectedOrgUnit.closedDate();
             } else {
                 maxDate = new Date(System.currentTimeMillis());
             }
-        } else if (selectedOrgUnit.closedDate() != null && selectedProgram.selectEnrollmentDatesInFuture()) {
+        } else if (selectedOrgUnit.closedDate() != null && Boolean.TRUE.equals(selectedProgram.selectEnrollmentDatesInFuture())) {
             maxDate = selectedOrgUnit.closedDate();
         }
 
@@ -354,11 +362,22 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
                 selectedCalendar.set(Calendar.MILLISECOND, 0);
                 selectedEnrollmentDate = selectedCalendar.getTime();
 
-                enrollInOrgUnit(selectedOrgUnit.uid(), programUid, uid, selectedEnrollmentDate, queryData);
+                // Eyeseetea customization
+                //enrollInOrgUnit(selectedOrgUnit.uid(), programUid, uid, selectedEnrollmentDate, queryData);
+                String period = dateToYearlyPeriod(selectedEnrollmentDate);
+
+                boolean isActivatedOrgUnit = isActiveOrgUnit(d2, currentProgram.getValue(), selectedOrgUnit.uid(), period);
+
+                if (isActivatedOrgUnit) {
+                    enrollInOrgUnit(selectedOrgUnit.uid(), programUid, uid, selectedEnrollmentDate, queryData);
+                } else {
+                    view.showDeactivatedTeamError();
+                }
             }
         });
         dialog.show();
     }
+
 
     private void enrollInOrgUnit(String orgUnitUid, String programUid, String uid, Date enrollmentDate, HashMap<String, String> queryData) {
         compositeDisposable.add(
@@ -410,14 +429,13 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
                 .subscribe(
                         view.downloadProgress(),
                         t -> {
-                            if (t instanceof D2Error) {
-                                D2Error d2Error = (D2Error) t;
+                            if (t instanceof D2Error d2Error) {
                                 switch (d2Error.errorCode()) {
                                     case OWNERSHIP_ACCESS_DENIED:
                                         view.showBreakTheGlass(teiUid, enrollmentUid);
                                         break;
                                     default:
-                                        view.displayMessage(new D2ErrorUtils(view.getContext()).getErrorMessage(t));
+                                        view.displayMessage(resourceManager.parseD2Error(t));
                                         break;
                                 }
                             } else {
@@ -506,7 +524,7 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
 
         if (teiType.style() != null && teiType.style().icon() != null) {
             return
-                    ObjectStyleUtils.getIconResource(view.getContext(), teiType.style().icon(), R.drawable.ic_default_icon);
+                    ObjectStyleUtils.getIconResource(view.getContext(), teiType.style().icon(), R.drawable.ic_default_icon, colorUtils);
         } else
             return AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_default_icon);
     }
@@ -515,7 +533,7 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
     public Drawable getEnrollmentSymbolIcon() {
         if (selectedProgram != null) {
             if (selectedProgram.style() != null && selectedProgram.style().icon() != null) {
-                return ObjectStyleUtils.getIconResource(view.getContext(), selectedProgram.style().icon(), R.drawable.ic_default_outline);
+                return ObjectStyleUtils.getIconResource(view.getContext(), selectedProgram.style().icon(), R.drawable.ic_default_outline, colorUtils);
             } else
                 return AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_default_outline);
         }
@@ -528,7 +546,7 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
         TrackedEntityType teiType = d2.trackedEntityModule().trackedEntityTypes().withTrackedEntityTypeAttributes().uid(trackedEntityType).blockingGet();
 
         if (teiType.style() != null && teiType.style().color() != null) {
-            return ColorUtils.parseColor(teiType.style().color());
+            return colorUtils.parseColor(Objects.requireNonNull(teiType.style().color()));
         } else
             return -1;
     }
@@ -536,7 +554,7 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
     @Override
     public int getEnrollmentColor() {
         if (selectedProgram != null && selectedProgram.style() != null && selectedProgram.style().color() != null)
-            return ColorUtils.parseColor(selectedProgram.style().color());
+            return colorUtils.parseColor(Objects.requireNonNull(selectedProgram.style().color()));
         else
             return -1;
     }
@@ -550,16 +568,16 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
                 int color;
                 Drawable icon;
                 if (stage.style() != null && stage.style().color() != null) {
-                    color = ColorUtils.parseColor(stage.style().color());
+                    color = colorUtils.parseColor(Objects.requireNonNull(stage.style().color()));
                 } else {
                     color = -1;
                 }
                 if (stage.style() != null && stage.style().icon() != null) {
-                    icon = ObjectStyleUtils.getIconResource(view.getContext(), stage.style().icon(), R.drawable.ic_clinical_f_outline);
+                    icon = ObjectStyleUtils.getIconResource(view.getContext(), stage.style().icon(), R.drawable.ic_clinical_f_outline, colorUtils);
                 } else {
                     icon = AppCompatResources.getDrawable(view.getContext(), R.drawable.ic_clinical_f_outline);
                 }
-                stagesStyleMap.put(stage.displayName(), new StageStyle(color, icon));
+                stagesStyleMap.put(stage.displayName(), new StageStyle(color, Objects.requireNonNull(icon)));
             }
         }
         return stagesStyleMap;
@@ -612,9 +630,9 @@ public class SearchTEPresenter implements SearchTEContractsModule.Presenter {
         return programs.stream().map(program -> new ProgramSpinnerModel(
                 program.uid(),
                 program.displayName(),
-                syncStatusController.observeDownloadProcess().getValue().isProgramDownloading(
-                        program.uid()
-                )
+                Objects.requireNonNull(
+                        syncStatusController.observeDownloadProcess().getValue()
+                ).isProgramDownloading(program.uid())
         )).collect(Collectors.toList());
     }
 }
